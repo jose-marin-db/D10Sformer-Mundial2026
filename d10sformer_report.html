@@ -109,6 +109,27 @@
             </div>
         </section>
 
+        <section id="discoveries">
+            <div class="fade-in">
+                <h2 style="font-size: 2.5rem; margin-bottom: 1rem; text-align: center;">Aprendiendo el Fútbol: Embeddings</h2>
+                <p style="text-align: center; max-width: 800px; margin: 0 auto 3rem auto;">
+                    Al igual que Word2Vec agrupa palabras con significados similares, D10Sformer proyecta equipos y contextos a un espacio latente donde el "estilo" de juego se vuelve matemática geométrica.
+                </p>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                    <div style="background: var(--section-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid #30363d;">
+                        <h3 style="margin-bottom: 1rem; font-size: 1.2rem; color: var(--accent);">Clustering de Equipos (t-SNE)</h3>
+                        <img src="reports/embeddings_teams_tsne.png" alt="Teams t-SNE" style="width: 100%; height: auto; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                    </div>
+                    
+                    <div style="background: var(--section-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid #30363d;">
+                        <h3 style="margin-bottom: 1rem; font-size: 1.2rem; color: var(--accent);">PCA por Buckets ELO</h3>
+                        <img src="reports/embeddings_buckets_pca.png" alt="ELO Buckets PCA" style="width: 100%; height: auto; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Sections will go here -->
     </main>
     <script>
