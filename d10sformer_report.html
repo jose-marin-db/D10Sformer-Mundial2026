@@ -68,6 +68,47 @@
                 </div>
             </div>
         </section>
+
+        <section id="architecture" style="background-color: var(--section-bg);">
+            <div class="fade-in" style="display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;">
+                <div>
+                    <h2 style="font-size: 2.5rem; margin-bottom: 1.5rem;">El Motor: Transformer Encoder</h2>
+                    <p style="margin-bottom: 1rem;">Basado en arquitecturas tipo BERT, el modelo procesa eventos futbolísticos tokenizados.</p>
+                    <ul style="list-style: none; padding: 0;">
+                        <li style="margin-bottom: 1rem; padding: 1rem; background: rgba(46,160,67,0.1); border-radius: 8px;">
+                            <strong>Multi-class Classification</strong><br>
+                            Predicción de resultado (Win/Draw/Loss).
+                        </li>
+                        <li style="margin-bottom: 1rem; padding: 1rem; background: rgba(46,160,67,0.1); border-radius: 8px;">
+                            <strong>Auxiliary Regression</strong><br>
+                            Predicción directa de goles marcados.
+                        </li>
+                        <li style="padding: 1rem; background: rgba(46,160,67,0.1); border-radius: 8px;">
+                            <strong>Masked Language Modeling</strong><br>
+                            Regularización y robustez ante información parcial (Stochastic Masking).
+                        </li>
+                    </ul>
+                </div>
+                
+                <!-- Diagrama CSS simple -->
+                <div style="background: #000; padding: 2rem; border-radius: 12px; border: 1px dashed #30363d; text-align: center;">
+                    <div style="padding: 1rem; border: 2px solid var(--text-muted); border-radius: 8px; margin-bottom: 1rem;">Tokens (Eventos)</div>
+                    <div style="color: var(--accent);">↓</div>
+                    <div style="padding: 1.5rem; border: 2px solid var(--accent); background: rgba(46,160,67,0.2); border-radius: 8px; margin: 1rem 0; font-weight: bold;">Transformer Encoder Blocks</div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <div>↙</div>
+                        <div>↓</div>
+                        <div>↘</div>
+                    </div>
+                    <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                        <div style="flex: 1; padding: 0.5rem; border: 1px solid var(--text-muted); border-radius: 4px; font-size: 0.8rem;">W/D/L</div>
+                        <div style="flex: 1; padding: 0.5rem; border: 1px solid var(--text-muted); border-radius: 4px; font-size: 0.8rem;">Goles</div>
+                        <div style="flex: 1; padding: 0.5rem; border: 1px solid var(--text-muted); border-radius: 4px; font-size: 0.8rem;">MLM</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Sections will go here -->
     </main>
     <script>
