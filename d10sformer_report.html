@@ -109,23 +109,21 @@
             </div>
         </section>
 
-        <section id="discoveries">
+        <section id="simulation" style="background-color: var(--section-bg);">
             <div class="fade-in">
-                <h2 style="font-size: 2.5rem; margin-bottom: 1rem; text-align: center;">Aprendiendo el Fútbol: Embeddings</h2>
-                <p style="text-align: center; max-width: 800px; margin: 0 auto 3rem auto;">
-                    Al igual que Word2Vec agrupa palabras con significados similares, D10Sformer proyecta equipos y contextos a un espacio latente donde el "estilo" de juego se vuelve matemática geométrica.
+                <h2 style="font-size: 2.5rem; margin-bottom: 1rem; text-align: center;">Predicciones: Mundial 2026</h2>
+                <p style="text-align: center; max-width: 800px; margin: 0 auto 3rem auto; color: var(--text-muted);">
+                    Usando simulaciones de Monte Carlo a lo largo del fixture (bracket) proyectado, calculamos las probabilidades de supervivencia en cada fase del torneo.
                 </p>
                 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
-                    <div style="background: var(--section-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid #30363d;">
-                        <h3 style="margin-bottom: 1rem; font-size: 1.2rem; color: var(--accent);">Clustering de Equipos (t-SNE)</h3>
-                        <img src="reports/embeddings_teams_tsne.png" alt="Teams t-SNE" style="width: 100%; height: auto; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-                    </div>
-                    
-                    <div style="background: var(--section-bg); padding: 1.5rem; border-radius: 12px; border: 1px solid #30363d;">
-                        <h3 style="margin-bottom: 1rem; font-size: 1.2rem; color: var(--accent);">PCA por Buckets ELO</h3>
-                        <img src="reports/embeddings_buckets_pca.png" alt="ELO Buckets PCA" style="width: 100%; height: auto; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
-                    </div>
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="margin-bottom: 1rem; font-size: 1.2rem; color: var(--accent);">Probabilidades de Campeón</h3>
+                    <img src="reports/wc2026_champion_probabilities.png" alt="Champion Probabilities" style="width: 100%; max-width: 1000px; height: auto; display: block; margin: 0 auto; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.8);">
+                </div>
+
+                <div>
+                    <h3 style="margin-bottom: 1rem; font-size: 1.2rem; color: var(--accent);">Probabilidades por Fase</h3>
+                    <img src="reports/wc2026_stage_probabilities.png" alt="Stage Probabilities" style="width: 100%; max-width: 1000px; height: auto; display: block; margin: 0 auto; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.8);">
                 </div>
             </div>
         </section>
