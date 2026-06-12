@@ -133,11 +133,11 @@ def load_historical_data_and_features():
     if live_state_path.exists():
         with open(live_state_path, 'rb') as f:
             state = pickle.load(f)
-        return state['team_features'], state['WC_TEAMS']
+        loaded_matches = state.get('loaded_matches', [])
+        return state['team_features'], state['WC_TEAMS'], loaded_matches
 
     DATA_INTERIM = Path('interim')
     df_int = pd.read_parquet(DATA_INTERIM / 'international_matches_with_elo.parquet')
-    df_int['date'] = pd.to_datetime(df_int['date'])
     df_sorted = df_int.sort_values('date').reset_index(drop=True).copy()
 
     team_history = defaultdict(list)
@@ -191,13 +191,13 @@ def load_historical_data_and_features():
         else:
             team_features[t] = st
             
-    return team_features, WC_TEAMS
+    return team_features, WC_TEAMS, []
 
 # Load cached items
 try:
     model, vocab, tourn_map = load_transformer_model()
     model_v1 = load_d10sformer_v1(vocab)
-    team_features, WC_TEAMS = load_historical_data_and_features()
+    team_features, WC_TEAMS, loaded_matches = load_historical_data_and_features()
 except Exception as e:
     st.error(f"Error loading models or dataset. Make sure you trained the model first: {e}")
     st.stop()
@@ -277,10 +277,9 @@ st.markdown('<div class="subtitle">Modelos de Deep Learning (Transformers) para 
 # -------------------------------------------------------------
 # 2. Main Tabs Setup
 # -------------------------------------------------------------
-tab1, tab_tourn, tab3, tab4 = st.tabs([
+tab1, tab_tourn, tab4 = st.tabs([
     "⚔️ Simular Partido Independiente",
     "🎮 Simular Mundial Completo (Prode)",
-    "🧠 Simular con Alineaciones (v1)",
     "🔄 Cargar Resultados en Vivo"
 ])
 
@@ -1128,6 +1127,22 @@ with tab4:
     st.header("🔄 Cargar Resultados Oficiales en Vivo")
     st.write("Registra los resultados reales del Mundial 2026. El sistema recalculará automáticamente el ELO, forma y promedio de goles de ambos equipos, actualizando todo el panel de forma interactiva:")
     
+    # Render all loaded matches at the top as an official scoreboard
+    if loaded_matches:
+        st.subheader("📋 Partidos Jugados y Cargados en Vivo")
+        st.write("Estos son los partidos reales que ya han sido jugados y cargados en vivo por los usuarios. Sus resultados persisten en el servidor de forma global y actualizan los favoritismos de inmediato:")
+        
+        scores_records = []
+        for idx, m in enumerate(loaded_matches):
+            scores_records.append({
+                "N°": idx + 1,
+                "Local": m["home"],
+                "Marcador": f"{m['home_score']} - {m['away_score']}",
+                "Visitante": m["away"]
+            })
+        st.dataframe(pd.DataFrame(scores_records), hide_index=True, width='stretch')
+        st.markdown("---")
+        
     col_l, col_v = st.columns(2)
     with col_l:
         h_select = st.selectbox("Selección Local (A):", web_spanish_names, key="live_h", index=web_spanish_names.index("México"))
@@ -1199,183 +1214,25 @@ with tab4:
             team_features[a_eng]['form_pts'] = sum(x[0] for x in team_features[a_eng]['history'][-5:]) / 5.0
             team_features[a_eng]['recent_goals'] = sum(x[1] for x in team_features[a_eng]['history'][-5:]) / 5.0
             
+            # Append to loaded_matches
+            loaded_matches.append({
+                "home": h_select,
+                "away": a_select,
+                "home_score": int(g_h_input),
+                "away_score": int(g_a_input)
+            })
+            
             # Save to live state file
             live_dir = Path('live')
             live_dir.mkdir(exist_ok=True)
             with open(live_dir / 'streamlit_live_state.pkl', 'wb') as f:
-                pickle.dump({'team_features': team_features, 'WC_TEAMS': WC_TEAMS}, f)
+                pickle.dump({
+                    'team_features': team_features,
+                    'WC_TEAMS': WC_TEAMS,
+                    'loaded_matches': loaded_matches
+                }, f)
                 
             # Clear Cache & reload
             st.cache_data.clear()
             st.success(f"¡Resultados guardados con éxito! ELO actualizado: {h_select} {int(elo_a)} ➜ {int(new_elo_a)} | {a_select} {int(elo_b)} ➜ {int(new_elo_b)}. Panel recargado.")
 
-# -------------------------------------------------------------
-# TAB 5: SIMULADOR DE ALINEACIONES (v1)
-# -------------------------------------------------------------
-@st.cache_data
-def extract_team_rosters():
-    # Build team rosters backward
-    with open('processed/corpus/pretrain.pkl', 'rb') as f:
-        train_docs = pickle.load(f)
-        
-    rosters = defaultdict(list)
-    seen_players = defaultdict(set)
-    
-    for m in train_docs:
-        # Lineup A
-        if m.lineup_a:
-            for p in m.lineup_a:
-                pid_str = str(p.player_id)
-                if pid_str not in seen_players[m.team_a] and len(rosters[m.team_a]) < 26:
-                    p_info = vocab.player_info.get(pid_str)
-                    name = p_info.name if p_info else f"Jugador {pid_str}"
-                    rosters[m.team_a].append({
-                        'id': pid_str,
-                        'name': name,
-                        'position': p.position
-                    })
-                    seen_players[m.team_a].add(pid_str)
-        # Lineup B
-        if m.lineup_b:
-            for p in m.lineup_b:
-                pid_str = str(p.player_id)
-                if pid_str not in seen_players[m.team_b] and len(rosters[m.team_b]) < 26:
-                    p_info = vocab.player_info.get(pid_str)
-                    name = p_info.name if p_info else f"Jugador {pid_str}"
-                    rosters[m.team_b].append({
-                        'id': pid_str,
-                        'name': name,
-                        'position': p.position
-                    })
-                    seen_players[m.team_b].add(pid_str)
-                    
-    # Sort rosters by name
-    for team in rosters:
-        rosters[team] = sorted(rosters[team], key=lambda x: x['name'])
-        
-    return rosters
-
-with tab3:
-    st.header("🧠 Simulador de Alineaciones (D10Sformer v1)")
-    st.write("Aprovecha los embeddings semánticos profundos de los jugadores entrenados en el D10Sformer v1. Selecciona las alineaciones titulares exactas para ver cómo varía la probabilidad de marcador:")
-    
-    rosters = extract_team_rosters()
-    
-    col_la, col_lb = st.columns(2)
-    
-    with col_la:
-        h_v1_select = st.selectbox("Selección Local (A):", web_spanish_names, key="v1_h", index=web_spanish_names.index("Argentina"))
-        h_v1_eng = spanish_to_english_web[h_v1_select]
-        roster_a = rosters.get(h_v1_eng, [])
-        
-        st.markdown(f"**Alineación Titular {h_v1_select}:**")
-        player_options_a = [f"[{p['position']}] {p['name']} (ID: {p['id']})" for p in roster_a]
-        selected_player_strings_a = st.multiselect(
-            "Selecciona los jugadores titulares de A (por defecto se asumen fallbacks):",
-            player_options_a,
-            default=player_options_a[:11] if len(player_options_a) >= 11 else player_options_a,
-            key=f"v1_lineup_{h_v1_eng}"
-        )
-        
-    with col_lb:
-        a_v1_select = st.selectbox("Selección Visitante (B):", web_spanish_names, key="v1_b", index=web_spanish_names.index("Francia"))
-        a_v1_eng = spanish_to_english_web[a_v1_select]
-        roster_b = rosters.get(a_v1_eng, [])
-        
-        st.markdown(f"**Alineación Titular {a_v1_select}:**")
-        player_options_b = [f"[{p['position']}] {p['name']} (ID: {p['id']})" for p in roster_b]
-        selected_player_strings_b = st.multiselect(
-            "Selecciona los jugadores titulares de B (por defecto se asumen fallbacks):",
-            player_options_b,
-            default=player_options_b[:11] if len(player_options_b) >= 11 else player_options_b,
-            key=f"v1_lineup_{a_v1_eng}"
-        )
-        
-    # Helper to parse multi-select back to players
-    def get_selected_players(selected_strings, roster):
-        selected_pids = []
-        for s in selected_strings:
-            part = s.split("ID: ")[1][:-1]
-            selected_pids.append(part)
-        return [p for p in roster if p['id'] in selected_pids]
-        
-    sel_players_a = get_selected_players(selected_player_strings_a, roster_a)
-    sel_players_b = get_selected_players(selected_player_strings_b, roster_b)
-    
-    # Process through Tokenizer and D10Sformer v1
-    from data.tokenizer import MatchTokenizer, MatchDocument, PlayerRef, RollingFeatures
-    tokenizer_v1 = MatchTokenizer(vocab, max_seq_length=80)
-    
-    fa_v1 = team_features.get(h_v1_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
-    fb_v1 = team_features.get(a_v1_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
-    
-    # Construct lineups PlayerRef lists
-    lineup_refs_a = [PlayerRef(p['id'], p['position']) for p in sel_players_a] if sel_players_a else None
-    lineup_refs_b = [PlayerRef(p['id'], p['position']) for p in sel_players_b] if sel_players_b else None
-    
-    doc_v1 = MatchDocument(
-        tournament="FIFA World Cup",
-        team_a=h_v1_eng,
-        team_b=a_v1_eng,
-        venue="neutral",
-        stage=None,
-        lineup_a=lineup_refs_a,
-        lineup_b=lineup_refs_b,
-        features=RollingFeatures(
-            home_elo=fa_v1['elo'],
-            away_elo=fb_v1['elo'],
-            home_form_pts=fa_v1['form_pts'],
-            away_form_pts=fb_v1['form_pts'],
-            home_recent_goals=fa_v1['recent_goals'],
-            away_recent_goals=fb_v1['recent_goals']
-        )
-    )
-    
-    out_v1 = tokenizer_v1.tokenize(doc_v1)
-    
-    tok_v1_tensor = torch.tensor([out_v1.token_ids], dtype=torch.long)
-    seg_v1_tensor = torch.tensor([out_v1.segment_ids], dtype=torch.long)
-    
-    with torch.no_grad():
-        out_model_v1 = model_v1(tok_v1_tensor, seg_v1_tensor)
-        
-    res_v1_probs = F.softmax(out_model_v1["result_logits"], dim=-1)[0].numpy()
-    score_v1_probs = F.softmax(out_model_v1["score_logits"], dim=-1)[0].numpy()
-    
-    p_h_v1, p_d_v1, p_a_v1 = res_v1_probs[0], res_v1_probs[1], res_v1_probs[2]
-    
-    # Render Output Layout
-    col_out1, col_out2 = st.columns(2)
-    with col_out1:
-        labels_v1 = [f"Victoria {h_v1_select}", "Empate", f"Victoria {a_v1_select}"]
-        values_v1 = [p_h_v1, p_d_v1, p_a_v1]
-        colors_v1 = ['#10B981', '#F59E0B', '#EF4444']
-        
-        fig_v1 = go.Figure(data=[go.Pie(labels=labels_v1, values=values_v1, hole=.4, marker_colors=colors_v1)])
-        fig_v1.update_layout(
-            title_text="Distribución del Resultado (Alineación Seleccionada)",
-            annotations=[dict(text='Resultado', x=0.5, y=0.5, font_size=16, showarrow=False)],
-            margin=dict(l=20, r=20, t=40, b=20),
-            height=300
-        )
-        st.plotly_chart(fig_v1, use_container_width=True)
-        
-    with col_out2:
-        if prediction_mode == "Simulación Poisson (Realista y Goleador)":
-            v1_h, v1_a = p_to_score(p_h_v1, p_d_v1, p_a_v1, fa_v1['elo'], fb_v1['elo'], fa_v1['recent_goals'], fb_v1['recent_goals'])
-            v1_prob_str = "Modelo Calibrado (Poisson)"
-        else:
-            best_v1_idx = np.argmax(score_v1_probs)
-            v1_h = best_v1_idx // 6
-            v1_a = best_v1_idx % 6
-            v1_prob_str = f"Probabilidad: {score_v1_probs[best_v1_idx]*100:.1f}%"
-        
-        st.markdown(f"""
-        <div style="display: flex; flex-direction: column; justify-content: center; height: 100%;">
-            <div class="metric-card" style="margin-top: 2rem;">
-                <div class="metric-label">Marcador Recomendado (v1 con Alineaciones)</div>
-                <div class="metric-value">{v1_h} - {v1_a}</div>
-                <div style="font-weight: 700; color: #6B7280; font-size: 1.2rem;">{v1_prob_str}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
