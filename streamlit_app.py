@@ -519,36 +519,25 @@ with tab1:
         h_eng = spanish_to_english_web[h_web_select]
         a_eng = spanish_to_english_web[a_web_select]
         
-        # Retrieve default stats from team history
+        # Retrieve default stats from team history automatically
         feat_a = team_features.get(h_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0, 'form10_pts': 1.0})
         feat_b = team_features.get(a_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0, 'form10_pts': 1.0})
         
-        # Override stats with sliders inside expander
-        with st.expander("🛠️ Modo Dios / Ajuste Manual de Stats"):
-            # Team A Sliders
-            st.markdown(f"**📊 {h_web_select}:**")
-            h_elo = st.slider("ELO Rating A:", min_value=1000.0, max_value=2500.0, value=float(feat_a['elo']), step=10.0, key=f"h_elo_{h_eng}")
-            h_form = st.slider("Forma Pts A (Últimos 5):", min_value=0.0, max_value=3.0, value=float(feat_a['form_pts']), step=0.1, key=f"h_form_{h_eng}")
-            h_goals = st.slider("Goles Recientes A (Promedio):", min_value=0.0, max_value=5.0, value=float(feat_a['recent_goals']), step=0.1, key=f"h_goals_{h_eng}")
-            
-            # Team B Sliders
-            st.markdown(f"**📊 {a_web_select}:**")
-            a_elo = st.slider("ELO Rating B:", min_value=1000.0, max_value=2500.0, value=float(feat_b['elo']), step=10.0, key=f"a_elo_{a_eng}")
-            a_form = st.slider("Forma Pts B (Últimos 5):", min_value=0.0, max_value=3.0, value=float(feat_b['form_pts']), step=0.1, key=f"a_form_{a_eng}")
-            a_goals = st.slider("Goles Recientes B (Promedio):", min_value=0.0, max_value=5.0, value=float(feat_b['recent_goals']), step=0.1, key=f"a_goals_{a_eng}")
+        # Load stats natively (Zero sliders/clutter)
+        h_elo = float(feat_a['elo'])
+        a_elo = float(feat_b['elo'])
+        h_form = float(feat_a['form_pts'])
+        a_form = float(feat_b['form_pts'])
+        h_goals = float(feat_a['recent_goals'])
+        a_goals = float(feat_b['recent_goals'])
         
-        # Categoricals override
-        st.markdown("**Configuración del Entorno:**")
-        tournament_sel = st.selectbox("Clase de Torneo:", list(tourn_map.keys()), index=list(tourn_map.keys()).index("FIFA World Cup") if "FIFA World Cup" in tourn_map else 0)
-        venue_sel = st.selectbox("Localía del Equipo A (Venue):", ["Home", "Away", "Neutral"], index=2) # default to Neutral
-        
-        # Map selected values
-        t_class_idx = tourn_map[tournament_sel]
-        venue_idx = 0 if venue_sel == "Home" else (1 if venue_sel == "Away" else 2)
-        neutral_val = 1 if venue_sel == "Neutral" else 0
+        # Standard tournament environment (FIFA World Cup - Neutral Ground)
+        t_class_idx = tourn_map.get("FIFA World Cup", 0)
+        venue_idx = 2
+        neutral_val = 1
         
     with col2:
-        st.subheader("🔮 Predicciones de Inferencia en Tiempo Real")
+        st.subheader("🔮 Predicción en Tiempo Real")
         
         # Pack features into tensors
         cat_tensor = torch.tensor([[t_class_idx, neutral_val, venue_idx]], dtype=torch.long)
