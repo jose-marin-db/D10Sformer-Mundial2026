@@ -186,7 +186,18 @@ except Exception as e:
     st.error(f"Error loading models or dataset. Make sure you trained the model first: {e}")
     st.stop()
 
-def p_to_score(p_home, p_draw, p_away, base_total=2.8):
+def p_to_score(p_home, p_draw, p_away, elo_a, elo_b, goals_a, goals_b):
+    # Calculate a dynamic match goals rate based on offensive form and ELO discrepancy
+    base_rate = 2.6
+    combined_history = float(goals_a) + float(goals_b)
+    elo_diff = abs(float(elo_a) - float(elo_b))
+    
+    # Gap of 400 ELO adds about 0.4 expected goals
+    elo_adjustment = (elo_diff / 400.0) * 0.4
+    
+    base_total = (combined_history * 0.7) + (base_rate * 0.3) + elo_adjustment
+    base_total = max(1.8, min(base_total, 4.5))
+    
     p_h_eff = p_home + p_draw / 2
     p_a_eff = p_away + p_draw / 2
     
@@ -201,13 +212,13 @@ def p_to_score(p_home, p_draw, p_away, base_total=2.8):
         return avg_g, avg_g
         
     goals_h = round(rate_h)
-    goals_a = round(rate_a)
+    goals_a_out = round(rate_a)
     
     # Enforce favorite has more goals
-    if p_home > p_away and goals_h <= goals_a:
-        goals_h = goals_a + 1
-    elif p_away > p_home and goals_a <= goals_h:
-        goals_a = goals_h + 1
+    if p_home > p_away and goals_h <= goals_a_out:
+        goals_h = goals_a_out + 1
+    elif p_away > p_home and goals_a_out <= goals_h:
+        goals_a_out = goals_h + 1
         
     # Inject variance for major favorites
     if p_home > 0.70 and goals_h < 2:
@@ -215,12 +226,12 @@ def p_to_score(p_home, p_draw, p_away, base_total=2.8):
     if p_home > 0.85 and goals_h < 3:
         goals_h = 3
         
-    if p_away > 0.70 and goals_a < 2:
-        goals_a = 2
-    if p_away > 0.85 and goals_a < 3:
-        goals_a = 3
+    if p_away > 0.70 and goals_a_out < 2:
+        goals_a_out = 2
+    if p_away > 0.85 and goals_a_out < 3:
+        goals_a_out = 3
         
-    return goals_h, goals_a
+    return goals_h, goals_a_out
 
 # Sidebar Settings
 st.sidebar.header("⚙️ Configuración del Predictor")
@@ -228,10 +239,6 @@ prediction_mode = st.sidebar.radio(
     "Modelo de Goles (Marcadores):",
     ["Directo del Transformer (Conservador)", "Simulación Poisson (Realista y Goleador)"],
     index=1 # Default to exciting Poisson simulation
-)
-base_total_goals = st.sidebar.slider(
-    "Promedio de Goles por Partido:",
-    min_value=1.5, max_value=4.5, value=2.8, step=0.1
 )
 
 # Collapsible ELO Rankings in Sidebar
@@ -371,7 +378,7 @@ with tab1:
         with col_comp_v2:
             st.markdown("<h4 style='text-align: center; color: #1E3A8A;'>🏆 FT-Transformer (v2)</h4>", unsafe_allow_html=True)
             if prediction_mode == "Simulación Poisson (Realista y Goleador)":
-                rec_h, rec_a = p_to_score(p_home, p_draw, p_away, base_total=base_total_goals)
+                rec_h, rec_a = p_to_score(p_home, p_draw, p_away, h_elo, a_elo, h_goals, a_goals)
                 rec_prob_str = "Modelo Calibrado (Poisson)"
             else:
                 best_score_idx = np.argmax(probs)
@@ -398,7 +405,7 @@ with tab1:
         with col_comp_v1:
             st.markdown("<h4 style='text-align: center; color: #4B5563;'>🧠 D10Sformer (v1)</h4>", unsafe_allow_html=True)
             if prediction_mode == "Simulación Poisson (Realista y Goleador)":
-                rec_h_v1, rec_a_v1 = p_to_score(p_h_v1, p_d_v1, p_a_v1, base_total=base_total_goals)
+                rec_h_v1, rec_a_v1 = p_to_score(p_h_v1, p_d_v1, p_a_v1, h_elo, a_elo, h_goals, a_goals)
                 rec_prob_v1_str = "Modelo Calibrado (Poisson)"
             else:
                 best_score_v1_idx = np.argmax(score_v1_probs)
@@ -538,9 +545,12 @@ with tab_tourn:
                         p_h, p_d, p_a = float(probs[0]), float(probs[1]), float(probs[2])
                         outcome = sample_match_result(p_h, p_d, p_a, rng)
                         
+                        feat_a_match = team_features.get(a, {'elo': 1500.0, 'form_pts': 1.0, 'recent_goals': 1.0})
+                        feat_b_match = team_features.get(b, {'elo': 1500.0, 'form_pts': 1.0, 'recent_goals': 1.0})
+                        
                         # Dynamic goal generation
                         if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
-                            ga_h, ga_a = p_to_score(p_h, p_d, p_a, base_total=base_total_goals)
+                            ga_h, ga_a = p_to_score(p_h, p_d, p_a, feat_a_match['elo'], feat_b_match['elo'], feat_a_match['recent_goals'], feat_b_match['recent_goals'])
                         else:
                             ga_h, ga_a = sample_goals(p_h, p_d, p_a, rng=rng)
                             
@@ -611,9 +621,12 @@ with tab_tourn:
                 p_h, p_d, p_a = float(probs[0]), float(probs[1]), float(probs[2])
                 outcome = sample_knockout_winner(p_h, p_d, p_a, rng)
                 
+                feat_a_match = team_features.get(team_a, {'elo': 1500.0, 'form_pts': 1.0, 'recent_goals': 1.0})
+                feat_b_match = team_features.get(team_b, {'elo': 1500.0, 'form_pts': 1.0, 'recent_goals': 1.0})
+                
                 # Dynamic goals generation
                 if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
-                    ga_h, ga_a = p_to_score(p_h, p_d, p_a, base_total=base_total_goals)
+                    ga_h, ga_a = p_to_score(p_h, p_d, p_a, feat_a_match['elo'], feat_b_match['elo'], feat_a_match['recent_goals'], feat_b_match['recent_goals'])
                 else:
                     ga_h, ga_a = sample_goals(p_h, p_d, p_a, rng=rng)
                     
@@ -1295,7 +1308,7 @@ with tab3:
         
     with col_out2:
         if prediction_mode == "Simulación Poisson (Realista y Goleador)":
-            v1_h, v1_a = p_to_score(p_h_v1, p_d_v1, p_a_v1, base_total=base_total_goals)
+            v1_h, v1_a = p_to_score(p_h_v1, p_d_v1, p_a_v1, fa_v1['elo'], fb_v1['elo'], fa_v1['recent_goals'], fb_v1['recent_goals'])
             v1_prob_str = "Modelo Calibrado (Poisson)"
         else:
             best_v1_idx = np.argmax(score_v1_probs)
