@@ -28,50 +28,121 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for modern styling
+# Custom CSS for modern styling (Vercel/Stripe Minimalist Standard)
 st.markdown("""
 <style>
+    /* Global Page Font & Reset */
+    html, body, [class*="css"] {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    }
+    
     .main-title {
-        font-size: 2.8rem;
+        font-size: 2.4rem;
         font-weight: 800;
-        color: #1E3A8A;
+        color: #0F172A; /* Slate 900 */
         text-align: center;
         margin-bottom: 0.1rem;
+        letter-spacing: -0.5px;
     }
     .subtitle {
-        font-size: 1.2rem;
-        color: #4B5563;
+        font-size: 1.05rem;
+        color: #64748B; /* Slate 500 */
         text-align: center;
         margin-bottom: 2rem;
+        font-weight: 500;
     }
+    
+    /* Premium Minimalist Card Component */
     .metric-card {
-        background-color: #F3F4F6;
-        border-radius: 10px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        background-color: #F8FAFC; /* Slate 50 */
+        border: 1px solid #E2E8F0; /* Slate 200 */
+        border-radius: 12px;
+        padding: 1.2rem;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
         text-align: center;
+        transition: all 0.2s ease-in-out;
+    }
+    .metric-card:hover {
+        border-color: #CBD5E1;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03);
     }
     .metric-value {
-        font-size: 3rem;
-        font-weight: 900;
-        color: #10B981;
+        font-size: 2.8rem;
+        font-weight: 800;
+        color: #10B981; /* Emerald 500 */
+        letter-spacing: -1px;
     }
     .metric-label {
-        font-size: 0.9rem;
-        color: #6B7280;
-        font-weight: 600;
+        font-size: 0.8rem;
+        color: #64748B; /* Slate 500 */
+        font-weight: 700;
         text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.2rem;
     }
+    
+    /* Flat Modern Style Overrides for Native Streamlit Widgets */
     .stTabs [data-basetabs="tablist"] {
         justify-content: center;
+        border-bottom: 1px solid #E2E8F0 !important;
+        gap: 1rem !important;
     }
+    .stTabs [data-basetabs="tab"] {
+        font-weight: 700 !important;
+        color: #64748B !important;
+        border: none !important;
+        padding: 0.5rem 1rem !important;
+        transition: all 0.2s !important;
+    }
+    .stTabs [data-basetabs="tab"][aria-selected="true"] {
+        color: #2563EB !important; /* Royal Blue */
+        border-bottom: 2px solid #2563EB !important;
+    }
+    
+    div[data-testid="stExpander"] {
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        background-color: #FFFFFF !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02) !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    /* Sleek flat buttons */
+    .stButton > button {
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        font-size: 0.85rem !important;
+        padding: 0.5rem 1rem !important;
+        transition: all 0.2s ease-in-out !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+    }
+    .stButton > button[kind="primary"] {
+        background-color: #2563EB !important;
+        color: #FFFFFF !important;
+        border: none !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background-color: #1D4ED8 !important;
+        transform: translateY(-0.5px) !important;
+    }
+    .stButton > button[kind="secondary"] {
+        background-color: #F8FAFC !important;
+        color: #1E293B !important;
+        border: 1px solid #E2E8F0 !important;
+    }
+    .stButton > button[kind="secondary"]:hover {
+        background-color: #F1F5F9 !important;
+        border-color: #CBD5E1 !important;
+    }
+
     /* Mobile-first and responsive typography */
     @media (max-width: 768px) {
         .main-title {
             font-size: 1.4rem !important;
+            letter-spacing: -0.3px !important;
         }
         .subtitle {
-            font-size: 0.85rem !important;
+            font-size: 0.82rem !important;
             margin-bottom: 1.0rem !important;
         }
         .metric-value {
@@ -82,16 +153,19 @@ st.markdown("""
         }
         /* Scale down native headers and texts on mobile */
         h1 {
-            font-size: 1.3rem !important;
+            font-size: 1.2rem !important;
+            font-weight: 800 !important;
         }
         h2 {
-            font-size: 1.1rem !important;
+            font-size: 1.05rem !important;
+            font-weight: 700 !important;
         }
         h3 {
-            font-size: 0.95rem !important;
+            font-size: 0.9rem !important;
+            font-weight: 700 !important;
         }
         p, li, span, label, div[data-testid="stExpander"], div[data-testid="stMarkdownContainer"] {
-            font-size: 0.85rem !important;
+            font-size: 0.82rem !important;
         }
     }
 </style>
