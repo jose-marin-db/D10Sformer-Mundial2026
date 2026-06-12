@@ -65,6 +65,22 @@ st.markdown("""
     .stTabs [data-basetabs="tablist"] {
         justify-content: center;
     }
+    /* Mobile-first and responsive typography */
+    @media (max-width: 768px) {
+        .main-title {
+            font-size: 1.8rem !important;
+        }
+        .subtitle {
+            font-size: 0.95rem !important;
+            margin-bottom: 1.2rem !important;
+        }
+        .metric-value {
+            font-size: 2.1rem !important;
+        }
+        .metric-card {
+            padding: 0.8rem !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -255,8 +271,8 @@ with st.sidebar.expander("📈 Rankings de Fuerza (ELO Oficial)"):
     st.dataframe(df_leaderboard, height=400)
 
 # Title section
-st.markdown('<div class="main-title">⚽ D10Sformer v2 ⚽</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Feature Tokenizer Transformer (FT-Transformer) — Tabular Deep Learning Dashboard</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏆 Prode Inteligencia Artificial 2026 🏆</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Modelos de Deep Learning (Transformers) para predecir marcadores y simular el Mundial completo</div>', unsafe_allow_html=True)
 
 # -------------------------------------------------------------
 # 2. Main Tabs Setup
@@ -440,15 +456,15 @@ with tab_tourn:
     with col_sim_cfg:
         st.subheader("Configuración")
         sim_predictor_choice = st.selectbox(
-            "Modelo Predictor del Prode:",
-            ["FT-Transformer (v2)", "D10Sformer (v1)"],
+            "Modelo de Inteligencia Artificial:",
+            ["🏆 IA Premium (Más Inteligente)", "🧠 IA Clásica (Rápida)"],
             index=0,
             key="sim_pred_choice_widget"
         )
         
         sim_goals_mode = st.selectbox(
-            "Criterio de Goles / Marcadores:",
-            ["Directo del Transformer (Conservador)", "Simulación Poisson (Realista/Goleador)"],
+            "Estilo de Goles (Marcadores):",
+            ["🛡️ Marcadores Defensivos / Ajustados", "🔥 Marcadores Goleadores / Emocionantes"],
             index=1,
             key="sim_goals_widget"
         )
@@ -456,7 +472,7 @@ with tab_tourn:
         st.markdown("---")
         st.markdown("**🎲 Opción 1: Generador de Prode (Timeline de Azar)**")
         run_sim = st.button("🏁 Simular 1 Mundial Completo", type="primary", use_container_width=True)
-        st.caption("Corre un único Mundial stochásticamente. Excelente para obtener una combinación divertida de marcadores exactos y llaves de playoffs, con un alto nivel de sorpresas (como en la vida real).")
+        st.caption("Corre un único Mundial de forma stochástica. Excelente para obtener una combinación divertida de marcadores exactos y llaves de playoffs, con un alto nivel de sorpresas (como en la vida real).")
         
         st.markdown("---")
         st.markdown("**📊 Opción 2: Análisis Estadístico (Fiabilidad)**")
@@ -493,7 +509,7 @@ with tab_tourn:
                 feat_a = team_features.get(a_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 feat_b = team_features.get(b_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 
-                if sim_predictor_choice == "FT-Transformer (v2)":
+                if sim_predictor_choice == "🏆 IA Premium (Más Inteligente)":
                     cat_tensor = torch.tensor([[tourn_map.get("FIFA World Cup", 0), 1, 2]], dtype=torch.long)
                     cont_tensor = torch.tensor([[
                         feat_a['elo'], feat_b['elo'], feat_a['elo'] - feat_b['elo'],
@@ -552,7 +568,7 @@ with tab_tourn:
                         match_samples = []
                         for _ in range(n_samples):
                             s_outcome = sample_match_result(p_h, p_d, p_a, rng)
-                            if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
+                            if sim_goals_mode == "🔥 Marcadores Goleadores / Emocionantes":
                                 s_gh, s_ga = p_to_score(p_h, p_d, p_a, feat_a_match['elo'], feat_b_match['elo'], feat_a_match['recent_goals'], feat_b_match['recent_goals'])
                             else:
                                 s_gh, s_ga = sample_goals(p_h, p_d, p_a, rng=rng)
@@ -648,7 +664,7 @@ with tab_tourn:
                 match_samples = []
                 for _ in range(n_samples):
                     s_outcome = sample_knockout_winner(p_h, p_d, p_a, rng)
-                    if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
+                    if sim_goals_mode == "🔥 Marcadores Goleadores / Emocionantes":
                         s_gh, s_ga = p_to_score(p_h, p_d, p_a, feat_a_match['elo'], feat_b_match['elo'], feat_a_match['recent_goals'], feat_b_match['recent_goals'])
                     else:
                         s_gh, s_ga = sample_goals(p_h, p_d, p_a, rng=rng)
@@ -737,7 +753,7 @@ with tab_tourn:
                 feat_a = team_features.get(a_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 feat_b = team_features.get(b_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 
-                if sim_predictor_choice == "FT-Transformer (v2)":
+                if sim_predictor_choice == "🏆 IA Premium (Más Inteligente)":
                     cat_tensor = torch.tensor([[tourn_map.get("FIFA World Cup", 0), 1, 2]], dtype=torch.long)
                     cont_tensor = torch.tensor([[
                         feat_a['elo'], feat_b['elo'], feat_a['elo'] - feat_b['elo'],
