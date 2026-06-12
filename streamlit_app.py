@@ -543,18 +543,38 @@ with tab_tourn:
                         a, b = teams[i], teams[j]
                         probs = current_predictor(a, b)
                         p_h, p_d, p_a = float(probs[0]), float(probs[1]), float(probs[2])
-                        outcome = sample_match_result(p_h, p_d, p_a, rng)
                         
                         feat_a_match = team_features.get(a, {'elo': 1500.0, 'form_pts': 1.0, 'recent_goals': 1.0})
                         feat_b_match = team_features.get(b, {'elo': 1500.0, 'form_pts': 1.0, 'recent_goals': 1.0})
                         
-                        # Dynamic goal generation
-                        if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
-                            ga_h, ga_a = p_to_score(p_h, p_d, p_a, feat_a_match['elo'], feat_b_match['elo'], feat_a_match['recent_goals'], feat_b_match['recent_goals'])
-                        else:
-                            ga_h, ga_a = sample_goals(p_h, p_d, p_a, rng=rng)
+                        # Internal Monte Carlo: 100 parallel runs per match
+                        n_samples = 100
+                        match_samples = []
+                        for _ in range(n_samples):
+                            s_outcome = sample_match_result(p_h, p_d, p_a, rng)
+                            if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
+                                s_gh, s_ga = p_to_score(p_h, p_d, p_a, feat_a_match['elo'], feat_b_match['elo'], feat_a_match['recent_goals'], feat_b_match['recent_goals'])
+                            else:
+                                s_gh, s_ga = sample_goals(p_h, p_d, p_a, rng=rng)
+                            # Enforce
+                            if s_outcome == "home_win" and s_gh <= s_ga:
+                                s_gh = s_ga + 1
+                            elif s_outcome == "away_win" and s_ga <= s_gh:
+                                s_ga = s_gh + 1
+                            elif s_outcome == "draw" and s_gh != s_ga:
+                                s_gh = s_ga = max(s_gh, s_ga)
+                            match_samples.append((s_outcome, s_gh, s_ga))
                             
-                        # Enforce outcome consistency
+                        # Majority vote on outcome
+                        outcomes = [s[0] for s in match_samples]
+                        outcome = max(set(outcomes), key=outcomes.count)
+                        
+                        # Average of goals matching the majority outcome
+                        matching_scores = [s for s in match_samples if s[0] == outcome]
+                        ga_h = int(round(sum(s[1] for s in matching_scores) / len(matching_scores)))
+                        ga_a = int(round(sum(s[2] for s in matching_scores) / len(matching_scores)))
+                        
+                        # Final sanity enforcement
                         if outcome == "home_win" and ga_h <= ga_a:
                             ga_h = ga_a + 1
                         elif outcome == "away_win" and ga_a <= ga_h:
@@ -619,17 +639,35 @@ with tab_tourn:
                 
                 probs = current_predictor(team_a, team_b)
                 p_h, p_d, p_a = float(probs[0]), float(probs[1]), float(probs[2])
-                outcome = sample_knockout_winner(p_h, p_d, p_a, rng)
                 
                 feat_a_match = team_features.get(team_a, {'elo': 1500.0, 'form_pts': 1.0, 'recent_goals': 1.0})
                 feat_b_match = team_features.get(team_b, {'elo': 1500.0, 'form_pts': 1.0, 'recent_goals': 1.0})
                 
-                # Dynamic goals generation
-                if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
-                    ga_h, ga_a = p_to_score(p_h, p_d, p_a, feat_a_match['elo'], feat_b_match['elo'], feat_a_match['recent_goals'], feat_b_match['recent_goals'])
-                else:
-                    ga_h, ga_a = sample_goals(p_h, p_d, p_a, rng=rng)
+                # Internal Monte Carlo: 100 parallel runs per playoff match
+                n_samples = 100
+                match_samples = []
+                for _ in range(n_samples):
+                    s_outcome = sample_knockout_winner(p_h, p_d, p_a, rng)
+                    if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
+                        s_gh, s_ga = p_to_score(p_h, p_d, p_a, feat_a_match['elo'], feat_b_match['elo'], feat_a_match['recent_goals'], feat_b_match['recent_goals'])
+                    else:
+                        s_gh, s_ga = sample_goals(p_h, p_d, p_a, rng=rng)
+                    # Enforce
+                    if s_outcome == "home_win" and s_gh <= s_ga:
+                        s_gh = s_ga + 1
+                    elif s_outcome != "home_win" and s_ga <= s_gh:
+                        s_ga = s_gh + 1
+                    match_samples.append((s_outcome, s_gh, s_ga))
                     
+                # Majority vote on outcome
+                outcomes = [s[0] for s in match_samples]
+                outcome = max(set(outcomes), key=outcomes.count)
+                
+                # Average of goals matching the majority outcome
+                matching_scores = [s for s in match_samples if s[0] == outcome]
+                ga_h = int(round(sum(s[1] for s in matching_scores) / len(matching_scores)))
+                ga_a = int(round(sum(s[2] for s in matching_scores) / len(matching_scores)))
+                
                 if outcome == "home_win":
                     winner, loser = team_a, team_b
                     if ga_h <= ga_a:
