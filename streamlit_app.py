@@ -336,6 +336,127 @@ def p_to_score(p_home, p_draw, p_away, elo_a, elo_b, goals_a, goals_b):
         
     return goals_h, goals_a_out
 
+def get_available_matches_to_load(team_features, loaded_matches):
+    eng_to_spanish = {v: k for k, v in SPANISH_TO_ENGLISH.items()}
+    eng_to_spanish["Netherlands"] = "Países Bajos"
+    eng_to_spanish["Tunisia"] = "Túnez"
+    eng_to_spanish["South Korea"] = "República de Corea"
+    eng_to_spanish["Czech Republic"] = "República Checa"
+    eng_to_spanish["South Africa"] = "Sudáfrica"
+    
+    # Track played pairs as a set of frozensets of Spanish names
+    loaded_pairs = set()
+    for m in loaded_matches:
+        loaded_pairs.add(frozenset({m["home"], m["away"]}))
+        
+    available = []
+    
+    # 1. Check group stage matches
+    for grp, teams in WC2026_GROUPS.items():
+        for i in range(len(teams)):
+            for j in range(i + 1, len(teams)):
+                a_spa, b_spa = teams[i], teams[j]
+                if frozenset({a_spa, b_spa}) not in loaded_pairs:
+                    available.append({
+                        "id": f"group_{grp}_{a_spa}_{b_spa}",
+                        "type": "group",
+                        "group": grp,
+                        "home": a_spa,
+                        "away": b_spa,
+                        "label": f"🏆 Grupo {grp[-1]}: {a_spa} vs {b_spa}"
+                    })
+                    
+    # If group matches remain, we cannot unlock knockouts
+    if len(available) > 0:
+        return available
+        
+    # 2. All 72 group stage matches are loaded! Resolve Standings dynamically!
+    from simulation.simulator import GroupStanding, select_best_thirds, assign_thirds_to_slots, resolve_slot
+    from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL, ALL_KNOCKOUT_MATCHES, round_of_match
+    
+    group_standings = {}
+    for grp, teams in WC2026_GROUPS.items():
+        standings = {t: GroupStanding(team=SPANISH_TO_ENGLISH.get(t, t)) for t in teams}
+        grp_teams_set = set(teams)
+        for m in loaded_matches:
+            if m["home"] in grp_teams_set and m["away"] in grp_teams_set:
+                h_spa, a_spa = m["home"], m["away"]
+                gh, ga = m["home_score"], m["away_score"]
+                
+                standings[h_spa].goals_for += gh
+                standings[h_spa].goals_against += ga
+                standings[a_spa].goals_for += ga
+                standings[a_spa].goals_against += gh
+                
+                if gh > ga:
+                    standings[h_spa].points += 3
+                elif gh < ga:
+                    standings[a_spa].points += 3
+                else:
+                    standings[h_spa].points += 1
+                    standings[a_spa].points += 1
+                    
+        group_standings[grp] = sorted(standings.values(), key=lambda s: s.sort_key)
+        
+    ctx = {}
+    for grp, standings in group_standings.items():
+        ctx[f"1st_{grp}"] = standings[0].team
+        ctx[f"2nd_{grp}"] = standings[1].team
+        
+    rng_det = np.random.default_rng(42)
+    best_thirds = select_best_thirds(group_standings, n=8)
+    third_assignment = assign_thirds_to_slots(best_thirds, ROUND_OF_32, rng_det)
+    ctx.update(third_assignment)
+    
+    # 3. Resolve parent matches to unlock Knockouts recursively
+    loaded_ko_dict = {}
+    for m in loaded_matches:
+        if "match_id" in m:
+            loaded_ko_dict[m["match_id"]] = m
+            gh, ga = m["home_score"], m["away_score"]
+            h_eng = SPANISH_TO_ENGLISH.get(m["home"], m["home"])
+            a_eng = SPANISH_TO_ENGLISH.get(m["away"], m["away"])
+            if gh > ga:
+                winner, loser = h_eng, a_eng
+            else:
+                winner, loser = a_eng, h_eng
+            ctx[f"winner_match_{m['match_id']}"] = winner
+            ctx[f"loser_match_{m['match_id']}"] = loser
+            
+    for match in ALL_KNOCKOUT_MATCHES:
+        if match.match_id in loaded_ko_dict:
+            continue
+            
+        try:
+            team_a_eng = resolve_slot(match.slot_a, ctx)
+            team_b_eng = resolve_slot(match.slot_b, ctx)
+            
+            a_spa = eng_to_spanish.get(team_a_eng, team_a_eng)
+            b_spa = eng_to_spanish.get(team_b_eng, team_b_eng)
+            
+            round_label = round_of_match(match.match_id)
+            round_spa = {
+                "round_of_32": "16avos de Final",
+                "round_of_16": "Octavos de Final",
+                "quarterfinals": "Cuartos de Final",
+                "semifinals": "Semifinales",
+                "third_place": "Tercer Puesto",
+                "final": "Gran Final"
+            }.get(round_label, round_label)
+            
+            available.append({
+                "id": f"ko_{match.match_id}",
+                "type": "knockout",
+                "match_id": match.match_id,
+                "home": a_spa,
+                "away": b_spa,
+                "label": f"⚔️ {round_spa} (Partido {match.match_id}): {a_spa} vs {b_spa}"
+            })
+        except KeyError:
+            continue
+            
+    return available
+
 # Sidebar Settings
 st.sidebar.header("⚙️ Configuración del Predictor")
 prediction_mode = st.sidebar.radio(
@@ -474,62 +595,41 @@ with tab1:
         p_h_v1, p_d_v1, p_a_v1 = res_v1_probs[0], res_v1_probs[1], res_v1_probs[2]
         score_v1_probs = F.softmax(out_model_v1["score_logits"], dim=-1)[0].numpy()
         
-        # Split output into side-by-side columns
-        col_comp_v2, col_comp_v1 = st.columns(2)
+        # Calculate recommended scores for both models
+        if prediction_mode == "Simulación Poisson (Realista y Goleador)":
+            rec_h, rec_a = p_to_score(p_home, p_draw, p_away, h_elo, a_elo, h_goals, a_goals)
+            rec_prob_str = "Modelo Calibrado (Poisson)"
+            
+            rec_h_v1, rec_a_v1 = p_to_score(p_h_v1, p_d_v1, p_a_v1, h_elo, a_elo, h_goals, a_goals)
+        else:
+            best_score_idx = np.argmax(probs)
+            rec_h = best_score_idx // 6
+            rec_a = best_score_idx % 6
+            rec_prob_str = f"Probabilidad: {probs[best_score_idx]*100:.1f}%"
+            
+            best_score_v1_idx = np.argmax(score_v1_probs)
+            rec_h_v1 = best_score_v1_idx // 6
+            rec_a_v1 = best_score_v1_idx % 6
+            
+        # 1. Main Recommended Score Card (FT-Transformer v2)
+        st.markdown(f"""
+        <div class="metric-card" style="margin-bottom: 1.5rem;">
+            <div class="metric-label">Marcador Recomendado (IA Premium)</div>
+            <div class="metric-value" style="font-size: 2.4rem; color: #2563EB;">{rec_h} - {rec_a}</div>
+            <div style="font-weight: 700; color: #64748B; font-size: 0.85rem;">{rec_prob_str}</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with col_comp_v2:
-            st.markdown("<h4 style='text-align: center; color: #1E3A8A;'>🏆 FT-Transformer (v2)</h4>", unsafe_allow_html=True)
-            if prediction_mode == "Simulación Poisson (Realista y Goleador)":
-                rec_h, rec_a = p_to_score(p_home, p_draw, p_away, h_elo, a_elo, h_goals, a_goals)
-                rec_prob_str = "Modelo Calibrado (Poisson)"
-            else:
-                best_score_idx = np.argmax(probs)
-                rec_h = best_score_idx // 6
-                rec_a = best_score_idx % 6
-                rec_prob_str = f"Probabilidad: {probs[best_score_idx]*100:.1f}%"
-                
-            st.markdown(f"""
-            <div class="metric-card" style="margin-bottom: 1.5rem;">
-                <div class="metric-label">Marcador Recomendado (v2)</div>
-                <div class="metric-value" style="font-size: 2.2rem; color: #3B82F6;">{rec_h} - {rec_a}</div>
-                <div style="font-weight: 700; color: #6B7280; font-size: 0.8rem;">{rec_prob_str}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Donut Chart v2
-            labels_v2 = [f"Ganador A", "Empate", f"Ganador B"]
-            values_v2 = [p_home, p_draw, p_away]
-            colors_v2 = ['#10B981', '#F59E0B', '#EF4444']
-            fig_v2 = go.Figure(data=[go.Pie(labels=labels_v2, values=values_v2, hole=.4, marker_colors=colors_v2)])
-            fig_v2.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-            st.plotly_chart(fig_v2, use_container_width=True)
-            
-        with col_comp_v1:
-            st.markdown("<h4 style='text-align: center; color: #4B5563;'>🧠 D10Sformer (v1)</h4>", unsafe_allow_html=True)
-            if prediction_mode == "Simulación Poisson (Realista y Goleador)":
-                rec_h_v1, rec_a_v1 = p_to_score(p_h_v1, p_d_v1, p_a_v1, h_elo, a_elo, h_goals, a_goals)
-                rec_prob_v1_str = "Modelo Calibrado (Poisson)"
-            else:
-                best_score_v1_idx = np.argmax(score_v1_probs)
-                rec_h_v1 = best_score_v1_idx // 6
-                rec_a_v1 = best_score_v1_idx % 6
-                rec_prob_v1_str = f"Probabilidad: {score_v1_probs[best_score_v1_idx]*100:.1f}%"
-                
-            st.markdown(f"""
-            <div class="metric-card" style="margin-bottom: 1.5rem;">
-                <div class="metric-label">Marcador Recomendado (v1)</div>
-                <div class="metric-value" style="font-size: 2.2rem; color: #6B7280;">{rec_h_v1} - {rec_a_v1}</div>
-                <div style="font-weight: 700; color: #6B7280; font-size: 0.8rem;">{rec_prob_v1_str}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Donut Chart v1
-            labels_v1 = [f"Ganador A", "Empate", f"Ganador B"]
-            values_v1 = [p_h_v1, p_d_v1, p_a_v1]
-            colors_v1 = ['#10B981', '#F59E0B', '#EF4444']
-            fig_v1 = go.Figure(data=[go.Pie(labels=labels_v1, values=values_v1, hole=.4, marker_colors=colors_v1)])
-            fig_v1.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
-            st.plotly_chart(fig_v1, use_container_width=True)
+        # 2. Donut Chart for FT-Transformer v2
+        labels_v2 = [f"Victoria {h_web_select}", "Empate", f"Victoria {a_web_select}"]
+        values_v2 = [p_home, p_draw, p_away]
+        colors_v2 = ['#10B981', '#F59E0B', '#EF4444']
+        fig_v2 = go.Figure(data=[go.Pie(labels=labels_v2, values=values_v2, hole=.4, marker_colors=colors_v2)])
+        fig_v2.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+        st.plotly_chart(fig_v2, use_container_width=True)
+        
+        # 3. Subtle Reference to Classic Model
+        st.info(f"🧠 **Referencia IA Clásica (v1):** Marcador `{rec_h_v1} - {rec_a_v1}` | Victoria {h_web_select}: `{p_h_v1*100:.1f}%` | Empate: `{p_d_v1*100:.1f}%` | Victoria {a_web_select}: `{p_a_v1*100:.1f}%`.")
 
 # -------------------------------------------------------------
 # TAB TOURN: SIMULADOR DE MUNDIAL COMPLETO
@@ -1234,22 +1334,31 @@ with tab4:
             st.dataframe(pd.DataFrame(scores_records), hide_index=True, width='stretch')
         st.markdown("---")
         
-    col_l, col_v = st.columns(2)
-    with col_l:
-        h_select = st.selectbox("Selección Local (A):", web_spanish_names, key="live_h", index=web_spanish_names.index("México"))
-    with col_v:
-        a_select = st.selectbox("Selección Visitante (B):", web_spanish_names, key="live_a", index=web_spanish_names.index("Sudáfrica"))
+    # Fetch available matches dynamically based on current tournament progress
+    available_to_load = get_available_matches_to_load(team_features, loaded_matches)
+    
+    if not available_to_load:
+        st.success("🏆 ¡Mundial Completado! Se han cargado los 104 partidos del torneo con éxito global.")
+    else:
+        selected_match_dict = st.selectbox(
+            "Selecciona el Partido a Cargar:",
+            available_to_load,
+            format_func=lambda x: x["label"],
+            key="selected_match_logger"
+        )
         
-    col_gh, col_gv = st.columns(2)
-    with col_gh:
-        g_h_input = st.number_input(f"Goles de {h_select}:", min_value=0, max_value=20, value=0, step=1)
-    with col_gv:
-        g_a_input = st.number_input(f"Goles de {a_select}:", min_value=0, max_value=20, value=0, step=1)
+        h_select = selected_match_dict["home"]
+        a_select = selected_match_dict["away"]
         
-    if st.button("💾 Cargar y Recalcular ELO Oficial"):
-        if h_select == a_select:
-            st.error("Por favor, selecciona dos selecciones distintas.")
-        else:
+        st.markdown(f"⚽ Partido Seleccionado: **{h_select}** vs **{a_select}**")
+        
+        col_gh, col_gv = st.columns(2)
+        with col_gh:
+            g_h_input = st.number_input(f"Goles de {h_select}:", min_value=0, max_value=20, value=0, step=1, key="logger_g_h")
+        with col_gv:
+            g_a_input = st.number_input(f"Goles de {a_select}:", min_value=0, max_value=20, value=0, step=1, key="logger_g_a")
+            
+        if st.button("💾 Cargar y Recalcular ELO Oficial"):
             h_eng = spanish_to_english_web[h_select]
             a_eng = spanish_to_english_web[a_select]
             
@@ -1306,12 +1415,15 @@ with tab4:
             team_features[a_eng]['recent_goals'] = sum(x[1] for x in team_features[a_eng]['history'][-5:]) / 5.0
             
             # Append to loaded_matches
-            loaded_matches.append({
+            new_match_log = {
                 "home": h_select,
                 "away": a_select,
                 "home_score": int(g_h_input),
                 "away_score": int(g_a_input)
-            })
+            }
+            if selected_match_dict["type"] == "knockout":
+                new_match_log["match_id"] = selected_match_dict["match_id"]
+            loaded_matches.append(new_match_log)
             
             # Save to live state file
             live_dir = Path('live')
