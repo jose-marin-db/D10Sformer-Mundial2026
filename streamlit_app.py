@@ -289,6 +289,18 @@ except Exception as e:
     st.error(f"Error loading models or dataset. Make sure you trained the model first: {e}")
     st.stop()
 
+# Global Spanish to English web names mapping (KeyError Hotfix)
+spanish_to_english_web = SPANISH_TO_ENGLISH.copy()
+spanish_to_english_web["Paises Bajos"] = "Netherlands"
+spanish_to_english_web["Países Bajos"] = "Netherlands"
+spanish_to_english_web["Tunez"] = "Tunisia"
+spanish_to_english_web["Túnez"] = "Tunisia"
+spanish_to_english_web["Iraq"] = "Iraq"
+spanish_to_english_web["República de Corea"] = "South Korea"
+spanish_to_english_web["Corea del Sur"] = "South Korea"
+
+web_spanish_names = sorted(list(spanish_to_english_web.keys()))
+
 def p_to_score(p_home, p_draw, p_away, elo_a, elo_b, goals_a, goals_b):
     # Calculate a dynamic match goals rate based on offensive form and ELO discrepancy
     base_rate = 2.6
@@ -344,31 +356,55 @@ def get_available_matches_to_load(team_features, loaded_matches):
     eng_to_spanish["Czech Republic"] = "República Checa"
     eng_to_spanish["South Africa"] = "Sudáfrica"
     
-    # Track played pairs as a set of frozensets of Spanish names
-    loaded_pairs = set()
+    # Track played matches: frozenset({home, away}) -> m
+    played_group_map = {}
+    played_ko_map = {}
     for m in loaded_matches:
-        loaded_pairs.add(frozenset({m["home"], m["away"]}))
-        
-    available = []
+        if "match_id" in m:
+            played_ko_map[m["match_id"]] = m
+        else:
+            played_group_map[frozenset({m["home"], m["away"]})] = m
+            
+    unplayed = []
+    played = []
     
-    # 1. Check group stage matches
-    for grp, teams in WC2026_GROUPS.items():
-        for i in range(len(teams)):
-            for j in range(i + 1, len(teams)):
-                a_spa, b_spa = teams[i], teams[j]
-                if frozenset({a_spa, b_spa}) not in loaded_pairs:
-                    available.append({
+    # 1. Chronological Group Stage Generation (Fase 1, then Fase 2, then Fase 3)
+    for fase in [1, 2, 3]:
+        for grp, teams in WC2026_GROUPS.items():
+            if fase == 1:
+                pairs = [(teams[0], teams[1]), (teams[2], teams[3])]
+            elif fase == 2:
+                pairs = [(teams[0], teams[2]), (teams[1], teams[3])]
+            else:
+                pairs = [(teams[0], teams[3]), (teams[1], teams[2])]
+                
+            for a_spa, b_spa in pairs:
+                key = frozenset({a_spa, b_spa})
+                if key in played_group_map:
+                    m = played_group_map[key]
+                    played.append({
                         "id": f"group_{grp}_{a_spa}_{b_spa}",
                         "type": "group",
                         "group": grp,
                         "home": a_spa,
                         "away": b_spa,
-                        "label": f"🏆 Grupo {grp[-1]}: {a_spa} vs {b_spa}"
+                        "home_score": m["home_score"],
+                        "away_score": m["away_score"],
+                        "label": f"✅ Grupo {grp[-1]} (Fecha {fase}): {a_spa} {m['home_score']} - {m['away_score']} {b_spa} [Cargado]"
+                    })
+                else:
+                    unplayed.append({
+                        "id": f"group_{grp}_{a_spa}_{b_spa}",
+                        "type": "group",
+                        "group": grp,
+                        "home": a_spa,
+                        "away": b_spa,
+                        "label": f"🏆 Grupo {grp[-1]} (Fecha {fase}): {a_spa} vs {b_spa}"
                     })
                     
-    # If group matches remain, we cannot unlock knockouts
-    if len(available) > 0:
-        return available
+    # If any group matches remain unplayed, return unplayed + played group matches
+    if len(unplayed) > 0:
+        return unplayed + played
         
     # 2. All 72 group stage matches are loaded! Resolve Standings dynamically!
     from simulation.simulator import GroupStanding, select_best_thirds, assign_thirds_to_slots, resolve_slot
@@ -409,24 +445,21 @@ def get_available_matches_to_load(team_features, loaded_matches):
     ctx.update(third_assignment)
     
     # 3. Resolve parent matches to unlock Knockouts recursively
-    loaded_ko_dict = {}
-    for m in loaded_matches:
-        if "match_id" in m:
-            loaded_ko_dict[m["match_id"]] = m
-            gh, ga = m["home_score"], m["away_score"]
-            h_eng = SPANISH_TO_ENGLISH.get(m["home"], m["home"])
-            a_eng = SPANISH_TO_ENGLISH.get(m["away"], m["away"])
-            if gh > ga:
-                winner, loser = h_eng, a_eng
-            else:
-                winner, loser = a_eng, h_eng
-            ctx[f"winner_match_{m['match_id']}"] = winner
-            ctx[f"loser_match_{m['match_id']}"] = loser
-            
+    for mid, m in played_ko_map.items():
+        gh, ga = m["home_score"], m["away_score"]
+        h_eng = SPANISH_TO_ENGLISH.get(m["home"], m["home"])
+        a_eng = SPANISH_TO_ENGLISH.get(m["away"], m["away"])
+        if gh > ga:
+            winner, loser = h_eng, a_eng
+        else:
+            winner, loser = a_eng, h_eng
+        ctx[f"winner_match_{mid}"] = winner
+        ctx[f"loser_match_{mid}"] = loser
+        
+    unplayed_ko = []
+    played_ko = []
+    
     for match in ALL_KNOCKOUT_MATCHES:
-        if match.match_id in loaded_ko_dict:
-            continue
-            
         try:
             team_a_eng = resolve_slot(match.slot_a, ctx)
             team_b_eng = resolve_slot(match.slot_b, ctx)
@@ -444,18 +477,31 @@ def get_available_matches_to_load(team_features, loaded_matches):
                 "final": "Gran Final"
             }.get(round_label, round_label)
             
-            available.append({
-                "id": f"ko_{match.match_id}",
-                "type": "knockout",
-                "match_id": match.match_id,
-                "home": a_spa,
-                "away": b_spa,
-                "label": f"⚔️ {round_spa} (Partido {match.match_id}): {a_spa} vs {b_spa}"
-            })
+            if match.match_id in played_ko_map:
+                m = played_ko_map[match.match_id]
+                played_ko.append({
+                    "id": f"ko_{match.match_id}",
+                    "type": "knockout",
+                    "match_id": match.match_id,
+                    "home": a_spa,
+                    "away": b_spa,
+                    "home_score": m["home_score"],
+                    "away_score": m["away_score"],
+                    "label": f"✅ {round_spa} (Partido {match.match_id}): {a_spa} {m['home_score']} - {m['away_score']} {b_spa} [Cargado]"
+                })
+            else:
+                unplayed_ko.append({
+                    "id": f"ko_{match.match_id}",
+                    "type": "knockout",
+                    "match_id": match.match_id,
+                    "home": a_spa,
+                    "away": b_spa,
+                    "label": f"⚔️ {round_spa} (Partido {match.match_id}): {a_spa} vs {b_spa}"
+                })
         except KeyError:
             continue
             
-    return available
+    return unplayed_ko + played_ko
 
 # Sidebar Settings
 st.sidebar.header("⚙️ Configuración del Predictor")
@@ -502,16 +548,6 @@ with tab1:
     
     with col1:
         st.subheader("Configuración del Encuentro")
-        
-        # Team selections (map Spanish name on page to English name in model)
-        spanish_to_english_web = SPANISH_TO_ENGLISH.copy()
-        # Add names missing from standard dict
-        spanish_to_english_web["Paises Bajos"] = "Netherlands"
-        spanish_to_english_web["Tunez"] = "Tunisia"
-        spanish_to_english_web["Iraq"] = "Iraq"
-        spanish_to_english_web["República de Corea"] = "South Korea"
-        
-        web_spanish_names = sorted(list(spanish_to_english_web.keys()))
         
         h_web_select = st.selectbox("Selección Local (Team A):", web_spanish_names, index=web_spanish_names.index("Argentina"))
         a_web_select = st.selectbox("Selección Visitante (Team B):", web_spanish_names, index=web_spanish_names.index("Francia"))
@@ -1349,11 +1385,18 @@ with tab4:
         
         st.markdown(f"⚽ Partido Seleccionado: **{h_select}** vs **{a_select}**")
         
+        # Pre-fill goals automatically if the match has been loaded previously
+        default_gh = 0
+        default_ga = 0
+        if "home_score" in selected_match_dict:
+            default_gh = int(selected_match_dict["home_score"])
+            default_ga = int(selected_match_dict["away_score"])
+            
         col_gh, col_gv = st.columns(2)
         with col_gh:
-            g_h_input = st.number_input(f"Goles de {h_select}:", min_value=0, max_value=20, value=0, step=1, key="logger_g_h")
+            g_h_input = st.number_input(f"Goles de {h_select}:", min_value=0, max_value=20, value=default_gh, step=1, key="logger_g_h")
         with col_gv:
-            g_a_input = st.number_input(f"Goles de {a_select}:", min_value=0, max_value=20, value=0, step=1, key="logger_g_a")
+            g_a_input = st.number_input(f"Goles de {a_select}:", min_value=0, max_value=20, value=default_ga, step=1, key="logger_g_a")
             
         if st.button("💾 Cargar y Recalcular ELO Oficial"):
             h_eng = spanish_to_english_web[h_select]
@@ -1411,7 +1454,14 @@ with tab4:
             team_features[a_eng]['form_pts'] = sum(x[0] for x in team_features[a_eng]['history'][-5:]) / 5.0
             team_features[a_eng]['recent_goals'] = sum(x[1] for x in team_features[a_eng]['history'][-5:]) / 5.0
             
-            # Append to loaded_matches
+            # Filter out previous record of this match to enable dynamic overwrite (avoiding duplicates!)
+            if selected_match_dict["type"] == "knockout":
+                loaded_matches = [m for m in loaded_matches if m.get("match_id") != selected_match_dict["match_id"]]
+            else:
+                target_pair = frozenset({h_select, a_select})
+                loaded_matches = [m for m in loaded_matches if frozenset({m["home"], m["away"]}) != target_pair]
+                
+            # Append newly updated/created match log
             new_match_log = {
                 "home": h_select,
                 "away": a_select,
