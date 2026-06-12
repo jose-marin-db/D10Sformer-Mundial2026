@@ -234,6 +234,19 @@ base_total_goals = st.sidebar.slider(
     min_value=1.5, max_value=4.5, value=2.8, step=0.1
 )
 
+# Collapsible ELO Rankings in Sidebar
+with st.sidebar.expander("📈 Rankings de Fuerza (ELO Oficial)"):
+    lead_records = []
+    for t, feat in team_features.items():
+        spa_name = SPANISH_TO_ENGLISH.get(t, t)
+        lead_records.append({
+            "Selección": spa_name,
+            "ELO": int(feat["elo"])
+        })
+    df_leaderboard = pd.DataFrame(lead_records).sort_values("ELO", ascending=False).reset_index(drop=True)
+    df_leaderboard.index += 1
+    st.dataframe(df_leaderboard, height=400)
+
 # Title section
 st.markdown('<div class="main-title">⚽ D10Sformer v2 ⚽</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Feature Tokenizer Transformer (FT-Transformer) — Tabular Deep Learning Dashboard</div>', unsafe_allow_html=True)
@@ -241,68 +254,17 @@ st.markdown('<div class="subtitle">Feature Tokenizer Transformer (FT-Transformer
 # -------------------------------------------------------------
 # 2. Main Tabs Setup
 # -------------------------------------------------------------
-tab1, tab2, tab_tourn, tab3, tab4, tab5 = st.tabs([
-    "🏆 Predicciones de Fechas (Prode)",
-    "⚔️ Simulador de Partido Único",
-    "🎮 Simulador del Mundial Completo",
-    "📈 Rankings de Fuerza (ELO)",
-    "🔄 Actualización de Resultados Reales",
-    "🧠 Simulador de Alineaciones (v1)"
+tab1, tab_tourn, tab3, tab4 = st.tabs([
+    "⚔️ Simular Partido Independiente",
+    "🎮 Simular Mundial Completo (Prode)",
+    "🧠 Simular con Alineaciones (v1)",
+    "🔄 Cargar Resultados en Vivo"
 ])
 
 # -------------------------------------------------------------
-# TAB 1: PREDICCIONES FASE 1
+# TAB 1: SIMULADOR INTERACTIVO (FT-TRANSFORMER V2)
 # -------------------------------------------------------------
 with tab1:
-    st.header("Predicciones Oficiales de la Fase 1 del Mundial 2026")
-    st.write("Visualiza los marcadores exactos calculados por el cabezal multi-tarea del **D10Sformer** original sobre los 24 partidos inaugurales:")
-    
-    # Load JSON output
-    try:
-        with open("d10sformer_fase1_predictions_output.json") as f:
-            predictions_fase1 = json.load(f)
-            
-        # Structure into DataFrame for clean display
-        records = []
-        for p in predictions_fase1:
-            if prediction_mode == "Simulación Poisson (Realista y Goleador)":
-                g_h, g_a = p_to_score(p["p_home"], p["p_draw"], p["p_away"], base_total=base_total_goals)
-                rec_score = f"{g_h} - {g_a}"
-                conf_score = "Calibrado (Poisson)"
-            else:
-                rec_score = f"{p['score_h']} - {p['score_a']}"
-                conf_score = f"{p['p_score']*100:.1f}%"
-                
-            records.append({
-                "Grupo": p["group"],
-                "Local (Home)": p["home_web"],
-                "Visitante (Away)": p["away_web"],
-                "Gana Local": f"{p['p_home']*100:.1f}%",
-                "Empate": f"{p['p_draw']*100:.1f}%",
-                "Gana Visita": f"{p['p_away']*100:.1f}%",
-                "Marcador Recomendado": rec_score,
-                "Confianza / Tipo": conf_score
-            })
-        df_pred = pd.DataFrame(records)
-        
-        st.dataframe(
-            df_pred,
-            width='stretch',
-            column_config={
-                "Grupo": st.column_config.TextColumn(width="medium"),
-                "Local (Home)": st.column_config.TextColumn(width="medium"),
-                "Visitante (Away)": st.column_config.TextColumn(width="medium"),
-                "Marcador Recomendado": st.column_config.TextColumn(width="medium")
-            },
-            hide_index=True
-        )
-    except FileNotFoundError:
-        st.warning("No se encontró el archivo de predicciones de Fase 1. Asegúrate de haber ejecutado 'predict_d10sformer_matchday1.py'.")
-
-# -------------------------------------------------------------
-# TAB 2: SIMULADOR INTERACTIVO (FT-TRANSFORMER V2)
-# -------------------------------------------------------------
-with tab2:
     st.header("Simulador de Partidos con FT-Transformer v2")
     st.write("Selecciona cualquier emparejamiento, ajusta las variables continuas de alta resolución y observa cómo el Transformer recalcula la distribución de goles en tiempo real:")
     
@@ -1093,29 +1055,6 @@ with tab_tourn:
         )
 
 # -------------------------------------------------------------
-# TAB 3: RANKING DE FUERZA E INSIGHTS (XAI)
-# -------------------------------------------------------------
-with tab3:
-    st.header("Líderes ELO del Mundial 2026")
-    st.write("Líderes absolutos calculados mediante la integración histórica de partidos desde 1872:")
-    
-    # Sort teams by ELO
-    lead_records = []
-    for t, feat in team_features.items():
-        # Get Spanish name
-        spa_name = SPANISH_TO_ENGLISH.get(t, t)
-        lead_records.append({
-            "Selección": spa_name,
-            "ELO Rating": int(feat["elo"]),
-            "Forma Reciente (Goles/Partidos)": f"{feat['recent_goals']:.2f}",
-            "Puntos Forma (Últimos 5)": f"{feat['form_pts']:.2f}"
-        })
-    df_leaderboard = pd.DataFrame(lead_records).sort_values("ELO Rating", ascending=False).reset_index(drop=True)
-    df_leaderboard.index += 1
-    
-    st.dataframe(df_leaderboard, width='stretch')
-
-# -------------------------------------------------------------
 # TAB 4: ACTUALIZACIÓN EN VIVO (LIVE LOGGER)
 # -------------------------------------------------------------
 with tab4:
@@ -1249,7 +1188,7 @@ def extract_team_rosters():
         
     return rosters
 
-with tab5:
+with tab3:
     st.header("🧠 Simulador de Alineaciones (D10Sformer v1)")
     st.write("Aprovecha los embeddings semánticos profundos de los jugadores entrenados en el D10Sformer v1. Selecciona las alineaciones titulares exactas para ver cómo varía la probabilidad de marcador:")
     
