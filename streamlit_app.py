@@ -484,14 +484,31 @@ with tab_tourn:
             key="sim_goals_widget"
         )
         
-        run_sim = st.button("🏁 Iniciar Simulación del Mundial", type="primary", use_container_width=True)
+        st.markdown("---")
+        st.markdown("**🎲 Opción 1: Generador de Prode (Timeline de Azar)**")
+        run_sim = st.button("🏁 Simular 1 Mundial Completo", type="primary", use_container_width=True)
+        st.caption("Corre un único Mundial stochásticamente. Excelente para obtener una combinación divertida de marcadores exactos y llaves de playoffs, con un alto nivel de sorpresas (como en la vida real).")
+        
+        st.markdown("---")
+        st.markdown("**📊 Opción 2: Análisis Estadístico (Fiabilidad)**")
+        mc_iters = st.slider("Iteraciones Monte Carlo:", min_value=50, max_value=1000, value=200, step=50, key="sim_mc_iters_widget")
+        run_mc = st.button("📈 Correr Análisis Monte Carlo", type="secondary", use_container_width=True)
+        st.caption("Simula cientos de Mundiales en segundos de forma stochástica y consolida los resultados para darnos el verdadero ranking científico de favoritos sin el ruido del azar.")
         
     with col_sim_act:
-        st.subheader("Historial de Simulaciones")
+        st.subheader("🔍 Estado de los Datos y Fiabilidad")
+        st.write(
+            "⚽ **¿Por qué varía el Campeón cada vez que simulo un solo Mundial?**\n"
+            "Porque el fútbol es intrínsecamente impredecible. El modelo predice **probabilidades**, no verdades absolutas. "
+            "Cuando simulas un Mundial único, cada partido se define por azar ponderado. Esto puede generar sorpresas increíbles (como en la vida real, donde Grecia ganó la Eurocopa o Arabia Saudita le ganó a Argentina).\n\n"
+            "📊 **Para obtener predicciones FIABLES (Análisis Monte Carlo):**\n"
+            "Utiliza la **Opción 2** para simular el Mundial 200 o 500 veces de corrido. Al promediar los resultados, "
+            "el ruido estadístico desaparece y emerge el **verdadero y robusto favoritismo matemático** de cada país."
+        )
         if "sim_result" in st.session_state:
-            st.info(f"Mostrando simulación anterior (Semilla: {st.session_state['sim_seed']}, Modelo: {st.session_state['sim_predictor']})")
-        else:
-            st.write("Presiona el botón para correr tu primera simulación completa de 104 partidos del Mundial 2026.")
+            st.success(f"Mostrando simulación anterior (Semilla: {st.session_state['sim_seed']}, Modelo: {st.session_state['sim_predictor']})")
+        elif "mc_df" in st.session_state:
+            st.success(f"Mostrando análisis Monte Carlo anterior ({st.session_state['mc_iters']} iteraciones, Modelo: {st.session_state['mc_predictor']})")
             
     if run_sim:
         with st.spinner("Simulando fase de grupos (72 partidos), calculando goles y resolviendo playoffs (32 partidos)..."):
@@ -693,6 +710,72 @@ with tab_tourn:
             st.balloons()
             st.snow()
             st.success(f"¡Mundial simulado con éxito! Semilla estocástica: {seed}")
+            
+    if run_mc:
+        with st.spinner(f"Corriendo {mc_iters} simulaciones Monte Carlo completas del Mundial..."):
+            import random
+            from simulation.simulator import monte_carlo
+            
+            seed = random.randint(1, 100000)
+            rng = np.random.default_rng(seed)
+            
+            # Predictor Callable
+            def current_predictor(a_eng, b_eng):
+                feat_a = team_features.get(a_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
+                feat_b = team_features.get(b_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
+                
+                if sim_predictor_choice == "FT-Transformer (v2)":
+                    cat_tensor = torch.tensor([[tourn_map.get("FIFA World Cup", 0), 1, 2]], dtype=torch.long)
+                    cont_tensor = torch.tensor([[
+                        feat_a['elo'], feat_b['elo'], feat_a['elo'] - feat_b['elo'],
+                        feat_a['form_pts'], feat_b['form_pts'],
+                        feat_a['recent_goals'], feat_b['recent_goals'],
+                        feat_a['form_pts'], feat_b['form_pts']
+                    ]], dtype=torch.float32)
+                    with torch.no_grad():
+                        logits = model(cat_tensor, cont_tensor)
+                        probs = F.softmax(logits, dim=-1)[0].numpy()
+                    p_home, p_draw, p_away = 0.0, 0.0, 0.0
+                    for idx in range(36):
+                        h_g = idx // 6
+                        a_g = idx % 6
+                        if h_g > a_g: p_home += probs[idx]
+                        elif h_g == a_g: p_draw += probs[idx]
+                        else: p_away += probs[idx]
+                    return np.array([p_home, p_draw, p_away])
+                else:
+                    from data.tokenizer import MatchTokenizer, MatchDocument, RollingFeatures
+                    tokenizer_v1 = MatchTokenizer(vocab, max_seq_length=80)
+                    doc_v1 = MatchDocument(
+                        tournament="FIFA World Cup", team_a=a_eng, team_b=b_eng, venue="neutral", stage=None,
+                        lineup_a=None, lineup_b=None,
+                        features=RollingFeatures(
+                            home_elo=feat_a['elo'], away_elo=feat_b['elo'],
+                            home_form_pts=feat_a['form_pts'], away_form_pts=feat_b['form_pts'],
+                            home_recent_goals=feat_a['recent_goals'], away_recent_goals=feat_b['recent_goals']
+                        )
+                    )
+                    out_v1 = tokenizer_v1.tokenize(doc_v1)
+                    tok_v1_tensor = torch.tensor([out_v1.token_ids], dtype=torch.long)
+                    seg_v1_tensor = torch.tensor([out_v1.segment_ids], dtype=torch.long)
+                    with torch.no_grad():
+                        out_model_v1 = model_v1(tok_v1_tensor, seg_v1_tensor)
+                    res_v1_probs = F.softmax(out_model_v1["result_logits"], dim=-1)[0].numpy()
+                    return np.array([res_v1_probs[0], res_v1_probs[1], res_v1_probs[2]])
+                    
+            mc_result = monte_carlo(current_predictor, n_iters=mc_iters, seed=seed)
+            df_mc = mc_result.to_dataframe()
+            
+            st.session_state["mc_df"] = df_mc
+            st.session_state["mc_iters"] = mc_iters
+            st.session_state["mc_predictor"] = sim_predictor_choice
+            st.session_state["mc_seed"] = seed
+            
+            # Clear single simulation results when running Monte Carlo
+            if "sim_result" in st.session_state:
+                del st.session_state["sim_result"]
+                
+            st.success(f"¡Análisis Monte Carlo de {mc_iters} simulaciones finalizado con éxito!")
             
     if "sim_result" in st.session_state:
         sim_result = st.session_state["sim_result"]
@@ -950,6 +1033,64 @@ with tab_tourn:
             bracket_html += '</div>'
             
             st.components.v1.html(bracket_html, height=850, scrolling=True)
+
+    if "mc_df" in st.session_state:
+        df_mc = st.session_state["mc_df"]
+        mc_iters = st.session_state["mc_iters"]
+        mc_pred = st.session_state["mc_predictor"]
+        
+        # English to Spanish name dictionary
+        eng_to_spanish = {v: k for k, v in SPANISH_TO_ENGLISH.items()}
+        eng_to_spanish["Netherlands"] = "Países Bajos"
+        eng_to_spanish["Tunisia"] = "Túnez"
+        eng_to_spanish["South Korea"] = "República de Corea"
+        eng_to_spanish["Czech Republic"] = "República Checa"
+        eng_to_spanish["South Africa"] = "Sudáfrica"
+        
+        st.markdown(f"### 📊 Resultados del Análisis Monte Carlo ({mc_iters} simulaciones)")
+        st.write(f"Aquí tienes el análisis consolidado libre de ruido estadístico calculado mediante la simulación de {mc_iters} Mundiales completos usando el modelo **{mc_pred}**:")
+        
+        # Plot top 10 favorites
+        df_top10 = df_mc.head(10).copy()
+        df_top10["País"] = df_top10["team"].map(lambda t: eng_to_spanish.get(t, t))
+        
+        fig_mc = px.bar(
+            df_top10,
+            x="P_champion",
+            y="País",
+            orientation='h',
+            text_auto='.1%',
+            labels={"P_champion": "Probabilidad de Campeonar", "País": "Selección"},
+            color="P_champion",
+            color_continuous_scale="Viridis",
+            title=f"Top 10 Favoritos para Ganar el Mundial 2026 ({mc_pred})"
+        )
+        fig_mc.update_layout(
+            yaxis={'categoryorder':'total ascending'},
+            height=400,
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        st.plotly_chart(fig_mc, use_container_width=True)
+        
+        # Complete table of probabilities
+        st.markdown("#### 📋 Matriz Completa de Probabilidades por Etapa (48 Selecciones)")
+        st.write("Explora las probabilidades detalladas de todas las selecciones de avanzar a cada etapa del torneo:")
+        
+        df_mc_display = df_mc.copy()
+        df_mc_display["Selección"] = df_mc_display["team"].map(lambda t: eng_to_spanish.get(t, t))
+        
+        # Format percentages beautifully
+        df_mc_display["Pasa Grupos"] = df_mc_display["P_group_advance"].map(lambda p: f"{p*100:.1f}%")
+        df_mc_display["Octavos"] = df_mc_display["P_round_of_16"].map(lambda p: f"{p*100:.1f}%")
+        df_mc_display["Cuartos"] = df_mc_display["P_quarters"].map(lambda p: f"{p*100:.1f}%")
+        df_mc_display["Semis"] = df_mc_display["P_semis"].map(lambda p: f"{p*100:.1f}%")
+        df_mc_display["Final"] = df_mc_display["P_final"].map(lambda p: f"{p*100:.1f}%")
+        df_mc_display["Campeón"] = df_mc_display["P_champion"].map(lambda p: f"{p*100:.1f}%")
+        
+        st.dataframe(
+            df_mc_display[["Selección", "Pasa Grupos", "Octavos", "Cuartos", "Semis", "Final", "Campeón"]],
+            width='stretch'
+        )
 
 # -------------------------------------------------------------
 # TAB 3: RANKING DE FUERZA E INSIGHTS (XAI)
