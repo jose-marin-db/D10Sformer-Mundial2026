@@ -641,72 +641,137 @@ with tab_tourn:
         # Expander for Playoffs
         from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL
         
-        with st.expander("⚔️ Ver Llaves de Eliminación Directa (Playoffs)"):
-            r32_tab, r16_tab, qf_tab, sf_tab, f_tab = st.tabs([
-                "Dieciseisavos (32)", "Octavos (16)", "Cuartos (8)", "Semifinales", "Tercer Puesto y Final"
-            ])
+        with st.expander("⚔️ Ver Cuadro y Llaves del Mundial (Formato Árbol)", expanded=True):
+            st.markdown("### 🏆 Diagrama de Eliminación Directa del Mundial 2026")
+            st.write("Sigue el flujo de las llaves oficiales de la FIFA de izquierda a derecha. Cada partido destaca al ganador clasificado y tacha al eliminado:")
             
-            with r32_tab:
-                st.markdown("#### Dieciseisavos de Final (32 equipos)")
-                col_32a, col_32b = st.columns(2)
-                for i, m in enumerate(ROUND_OF_32):
-                    w = sim_result.knockout_winners[m.match_id]
-                    l = sim_result.knockout_losers[m.match_id]
-                    w_spa = eng_to_spanish.get(w, w)
-                    l_spa = eng_to_spanish.get(l, l)
-                    text = f"🔹 **Partido {m.match_id}:** <span style='color: #10B981; font-weight: 700;'>✅ {w_spa}</span> vs {l_spa}"
-                    if i % 2 == 0:
-                        col_32a.markdown(text, unsafe_allow_html=True)
-                    else:
-                        col_32b.markdown(text, unsafe_allow_html=True)
-                        
-            with r16_tab:
-                st.markdown("#### Octavos de Final (16 equipos)")
-                col_16a, col_16b = st.columns(2)
-                for i, m in enumerate(ROUND_OF_16):
-                    w = sim_result.knockout_winners[m.match_id]
-                    l = sim_result.knockout_losers[m.match_id]
-                    w_spa = eng_to_spanish.get(w, w)
-                    l_spa = eng_to_spanish.get(l, l)
-                    text = f"🔹 **Partido {m.match_id}:** <span style='color: #10B981; font-weight: 700;'>✅ {w_spa}</span> vs {l_spa}"
-                    if i % 2 == 0:
-                        col_16a.markdown(text, unsafe_allow_html=True)
-                    else:
-                        col_16b.markdown(text, unsafe_allow_html=True)
-                        
-            with qf_tab:
-                st.markdown("#### Cuartos de Final (8 equipos)")
-                col_qfa, col_qfb = st.columns(2)
-                for i, m in enumerate(QUARTERFINALS):
-                    w = sim_result.knockout_winners[m.match_id]
-                    l = sim_result.knockout_losers[m.match_id]
-                    w_spa = eng_to_spanish.get(w, w)
-                    l_spa = eng_to_spanish.get(l, l)
-                    text = f"🔹 **Partido {m.match_id}:** <span style='color: #10B981; font-weight: 700;'>✅ {w_spa}</span> vs {l_spa}"
-                    if i % 2 == 0:
-                        col_qfa.markdown(text, unsafe_allow_html=True)
-                    else:
-                        col_qfb.markdown(text, unsafe_allow_html=True)
-                        
-            with sf_tab:
-                st.markdown("#### Semifinales")
-                for m in SEMIFINALS:
-                    w = sim_result.knockout_winners[m.match_id]
-                    l = sim_result.knockout_losers[m.match_id]
-                    w_spa = eng_to_spanish.get(w, w)
-                    l_spa = eng_to_spanish.get(l, l)
-                    st.markdown(f"🔹 **Partido {m.match_id}:** <span style='color: #10B981; font-weight: 700;'>✅ {w_spa}</span> vs {l_spa}", unsafe_allow_html=True)
-                    
-            with f_tab:
-                st.markdown("#### Tercer Puesto")
-                w_3 = sim_result.knockout_winners[THIRD_PLACE.match_id]
-                l_3 = sim_result.knockout_losers[THIRD_PLACE.match_id]
-                st.markdown(f"🥉 **Tercer Puesto:** <span style='color: #F59E0B; font-weight: 700;'>✅ {eng_to_spanish.get(w_3, w_3)}</span> vs {eng_to_spanish.get(l_3, l_3)}", unsafe_allow_html=True)
+            # Sub-helper to render a small match card in HTML/CSS
+            def get_bracket_match_card(mid, title_label):
+                w = sim_result.knockout_winners[mid]
+                l = sim_result.knockout_losers[mid]
+                w_spa = eng_to_spanish.get(w, w)
+                l_spa = eng_to_spanish.get(l, l)
                 
-                st.markdown("#### Gran Final de la Copa del Mundo 2026")
-                w_f = sim_result.knockout_winners[FINAL.match_id]
-                l_f = sim_result.knockout_losers[FINAL.match_id]
-                st.markdown(f"🏆 **Gran Final:** <span style='color: #D97706; font-weight: 900; font-size: 1.3rem;'>🥇 ✅ {eng_to_spanish.get(w_f, w_f)}</span> vs {eng_to_spanish.get(l_f, l_f)}", unsafe_allow_html=True)
+                return f"""
+                <div class="bracket-match">
+                    <div class="match-header">{title_label}</div>
+                    <div class="bracket-team winner">
+                        <span>✅ {w_spa}</span>
+                    </div>
+                    <div class="bracket-team loser">
+                        <span>❌ {l_spa}</span>
+                    </div>
+                </div>
+                """
+            
+            # CSS Styles
+            css_styles = """
+            <style>
+                .bracket-container {
+                    display: flex;
+                    flex-direction: row;
+                    justify-content: space-between;
+                    background-color: #0F172A; /* Modern dark Slate background */
+                    padding: 1.5rem;
+                    border-radius: 12px;
+                    overflow-x: auto;
+                    gap: 1.5rem;
+                    border: 1px solid #1E293B;
+                }
+                .round {
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-around;
+                    width: 19%;
+                    min-width: 180px;
+                }
+                .round-title {
+                    text-align: center;
+                    color: #38BDF8;
+                    font-weight: 800;
+                    font-size: 0.85rem;
+                    margin-bottom: 1rem;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                    border-bottom: 2px solid #334155;
+                    padding-bottom: 0.5rem;
+                }
+                .bracket-match {
+                    background: #1E293B;
+                    border: 1px solid #334155;
+                    border-radius: 8px;
+                    padding: 0.6rem;
+                    margin: 0.4rem 0;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+                    transition: transform 0.2s;
+                }
+                .bracket-match:hover {
+                    border-color: #38BDF8;
+                    transform: scale(1.02);
+                }
+                .match-header {
+                    font-size: 0.7rem;
+                    color: #64748B;
+                    margin-bottom: 0.3rem;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                }
+                .bracket-team {
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 0.15rem 0;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    color: #E2E8F0;
+                }
+                .bracket-team.winner {
+                    color: #10B981; /* Green for winner */
+                    font-weight: bold;
+                }
+                .bracket-team.loser {
+                    color: #64748B; /* Darker slate for loser */
+                    text-decoration: line-through;
+                    font-weight: normal;
+                }
+            </style>
+            """
+            
+            # Build Bracket columns
+            bracket_html = css_styles + '<div class="bracket-container">'
+            
+            # 1. Round of 32 column
+            bracket_html += '<div class="round"><div class="round-title">16avos de Final</div>'
+            for mid in [74, 77, 73, 75, 76, 78, 79, 80, 83, 84, 81, 82, 86, 88, 85, 87]:
+                bracket_html += get_bracket_match_card(mid, f"Partido {mid}")
+            bracket_html += '</div>'
+            
+            # 2. Round of 16 column
+            bracket_html += '<div class="round"><div class="round-title">Octavos de Final</div>'
+            for mid in [89, 90, 91, 92, 93, 94, 95, 96]:
+                bracket_html += get_bracket_match_card(mid, f"Partido {mid}")
+            bracket_html += '</div>'
+            
+            # 3. Quarterfinals column
+            bracket_html += '<div class="round"><div class="round-title">Cuartos de Final</div>'
+            for mid in [97, 98, 99, 100]:
+                bracket_html += get_bracket_match_card(mid, f"Partido {mid}")
+            bracket_html += '</div>'
+            
+            # 4. Semifinals column
+            bracket_html += '<div class="round"><div class="round-title">Semifinales</div>'
+            for mid in [101, 102]:
+                bracket_html += get_bracket_match_card(mid, f"Partido {mid}")
+            bracket_html += '</div>'
+            
+            # 5. Finals column
+            bracket_html += '<div class="round"><div class="round-title">Finales</div>'
+            bracket_html += get_bracket_match_card(104, "Gran Final 🥇")
+            bracket_html += get_bracket_match_card(103, "Tercer Puesto 🥉")
+            bracket_html += '</div>'
+            
+            bracket_html += '</div>'
+            
+            st.markdown(bracket_html, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
 # TAB 3: RANKING DE FUERZA E INSIGHTS (XAI)
