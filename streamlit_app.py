@@ -920,9 +920,12 @@ with tab_tourn:
         </div>
         """, unsafe_allow_html=True)
         
-        # Expander for Group Standings AND match scores
-        with st.expander("📊 Ver Posiciones y Marcadores de la Fase de Grupos (A - L)"):
-            st.write("¡Revisa las posiciones finales de cada grupo junto con los **marcadores exactos de los 72 partidos** de la primera etapa para armar tu prode!")
+        # Side-by-side columns: left for group standings, right for the Playoff Tree Diagram
+        col_left_res, col_right_res = st.columns([2, 3])
+        
+        with col_left_res:
+            st.markdown("### 📊 Posiciones de la Fase de Grupos")
+            st.write("Selecciona cualquier grupo para ver la tabla de posiciones consolidada y desplegar los marcadores exactos:")
             
             # Render groups 4 by 4 inside tabs to keep it clean and ultra-visual
             g_tab_a_d, g_tab_e_h, g_tab_i_l = st.tabs(["Grupos A - D", "Grupos E - H", "Grupos I - L"])
@@ -996,12 +999,9 @@ with tab_tourn:
                             a_s = eng_to_spanish.get(gm["away"], gm["away"])
                             st.write(f"{h_s} **{gm['home_score']} - {gm['away_score']}** {a_s}")
                     
-        # Expander for Playoffs Tree Diagram
-        from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL
-        
-        with st.expander("⚔️ Ver Cuadro y Llaves del Mundial (Formato Árbol)", expanded=True):
-            st.markdown("### 🏆 Diagrama de Eliminación Directa del Mundial 2026")
-            st.write("Sigue el flujo de las llaves oficiales de la FIFA de izquierda a derecha. Cada partido destaca al ganador clasificado y muestra los **marcadores exactos** del enfrentamiento:")
+        # Expander for Playoffs Tree Diagram in right column
+        with col_right_res:
+            st.markdown("### ⚔️ Cuadro de Playoffs (Árbol Visual)")
             
             # Sub-helper to render a small match card in HTML/CSS with exact scores
             def get_bracket_match_card(mid, title_label):
@@ -1164,47 +1164,52 @@ with tab_tourn:
         st.markdown(f"### 📊 Resultados del Análisis Monte Carlo ({mc_iters} simulaciones)")
         st.write(f"Aquí tienes el análisis consolidado libre de ruido estadístico calculado mediante la simulación de {mc_iters} Mundiales completos usando el modelo **{mc_pred}**:")
         
-        # Plot top 10 favorites
-        df_top10 = df_mc.head(10).copy()
-        df_top10["País"] = df_top10["team"].map(lambda t: eng_to_spanish.get(t, t))
+        # Split Monte Carlo into 2 columns side-by-side
+        col_mc_chart, col_mc_table = st.columns(2)
         
-        fig_mc = px.bar(
-            df_top10,
-            x="P_champion",
-            y="País",
-            orientation='h',
-            text_auto='.1%',
-            labels={"P_champion": "Probabilidad de Campeonar", "País": "Selección"},
-            color="P_champion",
-            color_continuous_scale="Viridis",
-            title=f"Top 10 Favoritos para Ganar el Mundial 2026 ({mc_pred})"
-        )
-        fig_mc.update_layout(
-            yaxis={'categoryorder':'total ascending'},
-            height=400,
-            margin=dict(l=20, r=20, t=40, b=20)
-        )
-        st.plotly_chart(fig_mc, use_container_width=True)
+        with col_mc_chart:
+                # Plot top 10 favorites
+            df_top10 = df_mc.head(10).copy()
+            df_top10["País"] = df_top10["team"].map(lambda t: eng_to_spanish.get(t, t))
         
-        # Complete table of probabilities
-        st.markdown("#### 📋 Matriz Completa de Probabilidades por Etapa (48 Selecciones)")
-        st.write("Explora las probabilidades detalladas de todas las selecciones de avanzar a cada etapa del torneo:")
+            fig_mc = px.bar(
+                df_top10,
+                x="P_champion",
+                y="País",
+                orientation='h',
+                text_auto='.1%',
+                labels={"P_champion": "Probabilidad de Campeonar", "País": "Selección"},
+                color="P_champion",
+                color_continuous_scale="Viridis",
+                title=f"Top 10 Favoritos para Ganar el Mundial 2026 ({mc_pred})"
+            )
+            fig_mc.update_layout(
+                yaxis={'categoryorder':'total ascending'},
+                height=400,
+                margin=dict(l=20, r=20, t=40, b=20)
+            )
+            st.plotly_chart(fig_mc, use_container_width=True)
         
-        df_mc_display = df_mc.copy()
-        df_mc_display["Selección"] = df_mc_display["team"].map(lambda t: eng_to_spanish.get(t, t))
+        with col_mc_table:
+            # Complete table of probabilities
+            st.markdown("#### 📋 Matriz Completa de Probabilidades por Etapa (48 Selecciones)")
+            st.write("Explora las probabilidades detalladas de todas las selecciones de avanzar a cada etapa del torneo:")
         
-        # Format percentages beautifully
-        df_mc_display["Pasa Grupos"] = df_mc_display["P_group_advance"].map(lambda p: f"{p*100:.1f}%")
-        df_mc_display["Octavos"] = df_mc_display["P_round_of_16"].map(lambda p: f"{p*100:.1f}%")
-        df_mc_display["Cuartos"] = df_mc_display["P_quarters"].map(lambda p: f"{p*100:.1f}%")
-        df_mc_display["Semis"] = df_mc_display["P_semis"].map(lambda p: f"{p*100:.1f}%")
-        df_mc_display["Final"] = df_mc_display["P_final"].map(lambda p: f"{p*100:.1f}%")
-        df_mc_display["Campeón"] = df_mc_display["P_champion"].map(lambda p: f"{p*100:.1f}%")
+            df_mc_display = df_mc.copy()
+            df_mc_display["Selección"] = df_mc_display["team"].map(lambda t: eng_to_spanish.get(t, t))
         
-        st.dataframe(
-            df_mc_display[["Selección", "Pasa Grupos", "Octavos", "Cuartos", "Semis", "Final", "Campeón"]],
-            width='stretch'
-        )
+            # Format percentages beautifully
+            df_mc_display["Pasa Grupos"] = df_mc_display["P_group_advance"].map(lambda p: f"{p*100:.1f}%")
+            df_mc_display["Octavos"] = df_mc_display["P_round_of_16"].map(lambda p: f"{p*100:.1f}%")
+            df_mc_display["Cuartos"] = df_mc_display["P_quarters"].map(lambda p: f"{p*100:.1f}%")
+            df_mc_display["Semis"] = df_mc_display["P_semis"].map(lambda p: f"{p*100:.1f}%")
+            df_mc_display["Final"] = df_mc_display["P_final"].map(lambda p: f"{p*100:.1f}%")
+            df_mc_display["Campeón"] = df_mc_display["P_champion"].map(lambda p: f"{p*100:.1f}%")
+        
+            st.dataframe(
+                df_mc_display[["Selección", "Pasa Grupos", "Octavos", "Cuartos", "Semis", "Final", "Campeón"]],
+                width='stretch'
+            )
 
 # -------------------------------------------------------------
 # TAB 4: ACTUALIZACIÓN EN VIVO (LIVE LOGGER)
