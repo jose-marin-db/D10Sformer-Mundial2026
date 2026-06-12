@@ -475,8 +475,8 @@ with tab_tourn:
     if run_sim:
         with st.spinner("Simulando fase de grupos (72 partidos), calculando goles y resolviendo playoffs (32 partidos)..."):
             import random
-            from simulation.simulator import GroupStanding, select_best_thirds, assign_thirds_to_slots, sample_match_result, sample_knockout_winner, sample_goals, TournamentResult
-            from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL, ALL_KNOCKOUT_MATCHES, round_of_match, STAGES, REACHED_AT_LEAST
+            from simulation.simulator import GroupStanding, select_best_thirds, assign_thirds_to_slots, sample_match_result, sample_knockout_winner, sample_goals, TournamentResult, STAGES, REACHED_AT_LEAST
+            from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL, ALL_KNOCKOUT_MATCHES, round_of_match
             
             seed = random.randint(1, 100000)
             rng = np.random.default_rng(seed)
