@@ -465,7 +465,7 @@ with tab2:
 # -------------------------------------------------------------
 with tab_tourn:
     st.header("🎮 Simulador de Torneo Completo (Monte Carlo)")
-    st.write("Simula un Mundial completo en tiempo real. Corre las predicciones estocásticas grupo por grupo, clasifica a los mejores terceros, resuelve las llaves de play-off y corona al campeón de forma dinámica.")
+    st.write("¡Simula un Mundial completo en tiempo real! Corre el modelo estocástico de principio a fin, clasifica a los mejores terceros, resuelve las llaves de playoffs y corona al campeón de forma dinámica con marcadores exactos de los 104 partidos para armar tus prodes.")
     
     col_sim_cfg, col_sim_act = st.columns([1, 2])
     with col_sim_cfg:
@@ -494,16 +494,16 @@ with tab_tourn:
             st.write("Presiona el botón para correr tu primera simulación completa de 104 partidos del Mundial 2026.")
             
     if run_sim:
-        with st.spinner("Resolviendo fase de grupos, seleccionando mejores terceros y corriendo los playoffs..."):
+        with st.spinner("Simulando fase de grupos (72 partidos), calculando goles y resolviendo playoffs (32 partidos)..."):
             import random
-            from simulation.simulator import simulate_tournament
-            from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL
+            from simulation.simulator import GroupStanding, select_best_thirds, assign_thirds_to_slots, sample_match_result, sample_knockout_winner, sample_goals, TournamentResult
+            from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL, ALL_KNOCKOUT_MATCHES, round_of_match, STAGES, REACHED_AT_LEAST
             
             seed = random.randint(1, 100000)
             rng = np.random.default_rng(seed)
             
-            # Helper to adapt our models into the standard Predictor callable signature
-            def current_predictor(a_eng, b_eng, venue="neutral"):
+            # 1. Predictor Callable
+            def current_predictor(a_eng, b_eng):
                 feat_a = team_features.get(a_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 feat_b = team_features.get(b_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 
@@ -546,17 +546,158 @@ with tab_tourn:
                     res_v1_probs = F.softmax(out_model_v1["result_logits"], dim=-1)[0].numpy()
                     return np.array([res_v1_probs[0], res_v1_probs[1], res_v1_probs[2]])
             
-            sim_result = simulate_tournament(current_predictor, rng)
+            # 2. Simulate Group Stage stochastically and record exact scores
+            sim_group_scores = defaultdict(list)
+            group_standings = {}
+            
+            for grp, teams in WC2026_GROUPS.items():
+                standings = {t: GroupStanding(team=t) for t in teams}
+                for i in range(len(teams)):
+                    for j in range(i + 1, len(teams)):
+                        a, b = teams[i], teams[j]
+                        probs = current_predictor(a, b)
+                        p_h, p_d, p_a = float(probs[0]), float(probs[1]), float(probs[2])
+                        outcome = sample_match_result(p_h, p_d, p_a, rng)
+                        
+                        # Dynamic goal generation
+                        if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
+                            ga_h, ga_a = p_to_score(p_h, p_d, p_a, base_total=base_total_goals)
+                        else:
+                            ga_h, ga_a = sample_goals(p_h, p_d, p_a, rng=rng)
+                            
+                        # Enforce outcome consistency
+                        if outcome == "home_win" and ga_h <= ga_a:
+                            ga_h = ga_a + 1
+                        elif outcome == "away_win" and ga_a <= ga_h:
+                            ga_a = ga_h + 1
+                        elif outcome == "draw" and ga_h != ga_a:
+                            ga_h = ga_a = max(ga_h, ga_a)
+                            
+                        # Record exact match score
+                        sim_group_scores[grp].append({
+                            "home": a, "away": b,
+                            "home_score": ga_h, "away_score": ga_a
+                        })
+                        
+                        # Update standings
+                        standings[a].goals_for += ga_h
+                        standings[a].goals_against += ga_a
+                        standings[b].goals_for += ga_a
+                        standings[b].goals_against += ga_h
+                        
+                        if outcome == "home_win":
+                            standings[a].points += 3
+                        elif outcome == "away_win":
+                            standings[b].points += 3
+                        else:
+                            standings[a].points += 1
+                            standings[b].points += 1
+                
+                # Sort group standings according to official FIFA tiebreaker
+                group_standings[grp] = sorted(standings.values(), key=lambda s: s.sort_key)
+                
+            # 3. Build context for playoffs
+            ctx = {}
+            progressions = {}
+            for grp, standings in group_standings.items():
+                ctx[f"1st_{grp}"] = standings[0].team
+                ctx[f"2nd_{grp}"] = standings[1].team
+                for s in standings[3:]:
+                    progressions[s.team] = "group"
+                for s in standings[:2]:
+                    progressions[s.team] = "round_of_32"
+                    
+            # 4. Select best thirds and assign slots
+            best_thirds = select_best_thirds(group_standings, n=8)
+            third_assignment = assign_thirds_to_slots(best_thirds, ROUND_OF_32, rng)
+            ctx.update(third_assignment)
+            for slot, team in third_assignment.items():
+                progressions[team] = "round_of_32"
+            picked_thirds = set(third_assignment.values())
+            for grp, standings in group_standings.items():
+                if len(standings) >= 3 and standings[2].team not in picked_thirds:
+                    progressions[standings[2].team] = "group"
+                    
+            # 5. Simulate Playoff Knockouts stochastically and record exact scores
+            knockout_winners = {}
+            knockout_losers = {}
+            sim_knockout_scores = {}
+            
+            from simulation.simulator import resolve_slot, round_of_match
+            for match in ALL_KNOCKOUT_MATCHES:
+                team_a = resolve_slot(match.slot_a, ctx)
+                team_b = resolve_slot(match.slot_b, ctx)
+                
+                probs = current_predictor(team_a, team_b)
+                p_h, p_d, p_a = float(probs[0]), float(probs[1]), float(probs[2])
+                outcome = sample_knockout_winner(p_h, p_d, p_a, rng)
+                
+                # Dynamic goals generation
+                if sim_goals_mode == "Simulación Poisson (Realista/Goleador)":
+                    ga_h, ga_a = p_to_score(p_h, p_d, p_a, base_total=base_total_goals)
+                else:
+                    ga_h, ga_a = sample_goals(p_h, p_d, p_a, rng=rng)
+                    
+                if outcome == "home_win":
+                    winner, loser = team_a, team_b
+                    if ga_h <= ga_a:
+                        ga_h = ga_a + 1
+                else:
+                    winner, loser = team_b, team_a
+                    if ga_a <= ga_h:
+                        ga_a = ga_h + 1
+                        
+                knockout_winners[match.match_id] = winner
+                knockout_losers[match.match_id] = loser
+                ctx[f"winner_match_{match.match_id}"] = winner
+                ctx[f"loser_match_{match.match_id}"] = loser
+                
+                # Record exact score of knockout match
+                sim_knockout_scores[match.match_id] = {
+                    "home": team_a, "away": team_b,
+                    "home_score": ga_h, "away_score": ga_a
+                }
+                
+                # Furthest stage tracking
+                round_name = round_of_match(match.match_id)
+                for t in (team_a, team_b):
+                    current = progressions.get(t, "group")
+                    if STAGES.index(round_name) > STAGES.index(current):
+                        progressions[t] = round_name
+                        
+            # Determine Champion
+            champion = knockout_winners[FINAL.match_id]
+            runner_up = knockout_losers[FINAL.match_id]
+            third_place = knockout_winners[THIRD_PLACE.match_id]
+            progressions[champion] = "champion"
+            if STAGES.index(progressions.get(runner_up, "group")) < STAGES.index("final"):
+                progressions[runner_up] = "final"
+                
+            sim_result = TournamentResult(
+                group_standings=group_standings,
+                knockout_winners=knockout_winners,
+                knockout_losers=knockout_losers,
+                progressions=progressions,
+                champion=champion,
+                runner_up=runner_up,
+                third_place=third_place
+            )
+            
+            # Save all in state
             st.session_state["sim_result"] = sim_result
+            st.session_state["sim_group_scores"] = sim_group_scores
+            st.session_state["sim_knockout_scores"] = sim_knockout_scores
             st.session_state["sim_seed"] = seed
             st.session_state["sim_predictor"] = sim_predictor_choice
             
             st.balloons()
             st.snow()
-            st.success(f"¡Simulación finalizada con éxito! Semilla: {seed}")
+            st.success(f"¡Mundial simulado con éxito! Semilla estocástica: {seed}")
             
     if "sim_result" in st.session_state:
         sim_result = st.session_state["sim_result"]
+        sim_group_scores = st.session_state["sim_group_scores"]
+        sim_knockout_scores = st.session_state["sim_knockout_scores"]
         
         # English to Spanish name dictionary
         eng_to_spanish = {v: k for k, v in SPANISH_TO_ENGLISH.items()}
@@ -585,8 +726,10 @@ with tab_tourn:
         </div>
         """, unsafe_allow_html=True)
         
-        # Expander for Group Standings
-        with st.expander("📊 Ver Posiciones de la Fase de Grupos (A - L)"):
+        # Expander for Group Standings AND match scores
+        with st.expander("📊 Ver Posiciones y Marcadores de la Fase de Grupos (A - L)"):
+            st.write("¡Revisa las posiciones finales de cada grupo junto con los **marcadores exactos de los 72 partidos** de la primera etapa para armar tu prode!")
+            
             # Render groups 4 by 4 inside tabs to keep it clean and ultra-visual
             g_tab_a_d, g_tab_e_h, g_tab_i_l = st.tabs(["Grupos A - D", "Grupos E - H", "Grupos I - L"])
             
@@ -606,6 +749,13 @@ with tab_tourn:
                     cols[idx].markdown(f"##### Grupo {grp[-1]}")
                     cols[idx].dataframe(pd.DataFrame(records), hide_index=True)
                     
+                    # Show group matches inside expander
+                    with cols[idx].expander("👁️ Ver Marcadores"):
+                        for gm in sim_group_scores[grp]:
+                            h_s = eng_to_spanish.get(gm["home"], gm["home"])
+                            a_s = eng_to_spanish.get(gm["away"], gm["away"])
+                            st.write(f"{h_s} **{gm['home_score']} - {gm['away_score']}** {a_s}")
+                    
             with g_tab_e_h:
                 col_e, col_f, col_g, col_h = st.columns(4)
                 cols = [col_e, col_f, col_g, col_h]
@@ -621,6 +771,13 @@ with tab_tourn:
                         })
                     cols[idx].markdown(f"##### Grupo {grp[-1]}")
                     cols[idx].dataframe(pd.DataFrame(records), hide_index=True)
+                    
+                    # Show group matches inside expander
+                    with cols[idx].expander("👁️ Ver Marcadores"):
+                        for gm in sim_group_scores[grp]:
+                            h_s = eng_to_spanish.get(gm["home"], gm["home"])
+                            a_s = eng_to_spanish.get(gm["away"], gm["away"])
+                            st.write(f"{h_s} **{gm['home_score']} - {gm['away_score']}** {a_s}")
                     
             with g_tab_i_l:
                 col_i, col_j, col_k, col_l = st.columns(4)
@@ -638,28 +795,49 @@ with tab_tourn:
                     cols[idx].markdown(f"##### Grupo {grp[-1]}")
                     cols[idx].dataframe(pd.DataFrame(records), hide_index=True)
                     
-        # Expander for Playoffs
+                    # Show group matches inside expander
+                    with cols[idx].expander("👁️ Ver Marcadores"):
+                        for gm in sim_group_scores[grp]:
+                            h_s = eng_to_spanish.get(gm["home"], gm["home"])
+                            a_s = eng_to_spanish.get(gm["away"], gm["away"])
+                            st.write(f"{h_s} **{gm['home_score']} - {gm['away_score']}** {a_s}")
+                    
+        # Expander for Playoffs Tree Diagram
         from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL
         
         with st.expander("⚔️ Ver Cuadro y Llaves del Mundial (Formato Árbol)", expanded=True):
             st.markdown("### 🏆 Diagrama de Eliminación Directa del Mundial 2026")
-            st.write("Sigue el flujo de las llaves oficiales de la FIFA de izquierda a derecha. Cada partido destaca al ganador clasificado y tacha al eliminado:")
+            st.write("Sigue el flujo de las llaves oficiales de la FIFA de izquierda a derecha. Cada partido destaca al ganador clasificado y muestra los **marcadores exactos** del enfrentamiento:")
             
-            # Sub-helper to render a small match card in HTML/CSS
+            # Sub-helper to render a small match card in HTML/CSS with exact scores
             def get_bracket_match_card(mid, title_label):
-                w = sim_result.knockout_winners[mid]
-                l = sim_result.knockout_losers[mid]
-                w_spa = eng_to_spanish.get(w, w)
-                l_spa = eng_to_spanish.get(l, l)
+                score_info = sim_knockout_scores[mid]
+                h_spa = eng_to_spanish.get(score_info["home"], score_info["home"])
+                a_spa = eng_to_spanish.get(score_info["away"], score_info["away"])
+                
+                h_score = score_info["home_score"]
+                a_score = score_info["away_score"]
+                
+                # Check who is the winner to apply bold green styling
+                is_home_winner = h_score > a_score
+                
+                home_class = "winner" if is_home_winner else "loser"
+                away_class = "loser" if is_home_winner else "winner"
+                
+                # Emoji indicators
+                home_emoji = "✅" if is_home_winner else "❌"
+                away_emoji = "❌" if is_home_winner else "✅"
                 
                 return f"""
                 <div class="bracket-match">
                     <div class="match-header">{title_label}</div>
-                    <div class="bracket-team winner">
-                        <span>✅ {w_spa}</span>
+                    <div class="bracket-team {home_class}">
+                        <span>{home_emoji} {h_spa}</span>
+                        <span>{h_score}</span>
                     </div>
-                    <div class="bracket-team loser">
-                        <span>❌ {l_spa}</span>
+                    <div class="bracket-team {away_class}">
+                        <span>{away_emoji} {a_spa}</span>
+                        <span>{a_score}</span>
                     </div>
                 </div>
                 """
