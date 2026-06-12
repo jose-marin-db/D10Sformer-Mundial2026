@@ -907,8 +907,16 @@ with tab_tourn:
             st.session_state["sim_seed"] = seed
             st.session_state["sim_predictor"] = sim_predictor_choice
             
-            st.balloons()
-            st.snow()
+            # Resolve Spanish champion name for the toast
+            eng_to_spanish_toast = {v: k for k, v in SPANISH_TO_ENGLISH.items()}
+            eng_to_spanish_toast["Netherlands"] = "Países Bajos"
+            eng_to_spanish_toast["Tunisia"] = "Túnez"
+            eng_to_spanish_toast["South Korea"] = "República de Corea"
+            eng_to_spanish_toast["Czech Republic"] = "República Checa"
+            eng_to_spanish_toast["South Africa"] = "Sudáfrica"
+            champ_spa_toast = eng_to_spanish_toast.get(champion, champion)
+            
+            st.toast(f"🏆 ¡{champ_spa_toast} se ha consagrado Campeón del Mundo!", icon="🏆")
             st.success(f"¡Mundial simulado con éxito! Semilla estocástica: {seed}")
             
     if run_mc:
