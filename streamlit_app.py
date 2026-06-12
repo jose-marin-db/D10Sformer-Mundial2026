@@ -1167,12 +1167,12 @@ def extract_team_rosters():
     rosters = defaultdict(list)
     seen_players = defaultdict(set)
     
-    for m in reversed(train_docs):
+    for m in train_docs:
         # Lineup A
         if m.lineup_a:
             for p in m.lineup_a:
                 pid_str = str(p.player_id)
-                if pid_str not in seen_players[m.team_a]:
+                if pid_str not in seen_players[m.team_a] and len(rosters[m.team_a]) < 26:
                     p_info = vocab.player_info.get(pid_str)
                     name = p_info.name if p_info else f"Jugador {pid_str}"
                     rosters[m.team_a].append({
@@ -1185,7 +1185,7 @@ def extract_team_rosters():
         if m.lineup_b:
             for p in m.lineup_b:
                 pid_str = str(p.player_id)
-                if pid_str not in seen_players[m.team_b]:
+                if pid_str not in seen_players[m.team_b] and len(rosters[m.team_b]) < 26:
                     p_info = vocab.player_info.get(pid_str)
                     name = p_info.name if p_info else f"Jugador {pid_str}"
                     rosters[m.team_b].append({
