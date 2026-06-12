@@ -771,7 +771,7 @@ with tab_tourn:
             
             bracket_html += '</div>'
             
-            st.markdown(bracket_html, unsafe_allow_html=True)
+            st.components.v1.html(bracket_html, height=850, scrolling=True)
 
 # -------------------------------------------------------------
 # TAB 3: RANKING DE FUERZA E INSIGHTS (XAI)
