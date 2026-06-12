@@ -68,17 +68,30 @@ st.markdown("""
     /* Mobile-first and responsive typography */
     @media (max-width: 768px) {
         .main-title {
-            font-size: 1.8rem !important;
+            font-size: 1.4rem !important;
         }
         .subtitle {
-            font-size: 0.95rem !important;
-            margin-bottom: 1.2rem !important;
+            font-size: 0.85rem !important;
+            margin-bottom: 1.0rem !important;
         }
         .metric-value {
-            font-size: 2.1rem !important;
+            font-size: 1.8rem !important;
         }
         .metric-card {
-            padding: 0.8rem !important;
+            padding: 0.6rem !important;
+        }
+        /* Scale down native headers and texts on mobile */
+        h1 {
+            font-size: 1.3rem !important;
+        }
+        h2 {
+            font-size: 1.1rem !important;
+        }
+        h3 {
+            font-size: 0.95rem !important;
+        }
+        p, li, span, label, div[data-testid="stExpander"], div[data-testid="stMarkdownContainer"] {
+            font-size: 0.85rem !important;
         }
     }
 </style>
@@ -1127,20 +1140,20 @@ with tab4:
     st.header("🔄 Cargar Resultados Oficiales en Vivo")
     st.write("Registra los resultados reales del Mundial 2026. El sistema recalculará automáticamente el ELO, forma y promedio de goles de ambos equipos, actualizando todo el panel de forma interactiva:")
     
-    # Render all loaded matches at the top as an official scoreboard
+    # Render all loaded matches at the top inside a collapsible expander
     if loaded_matches:
-        st.subheader("📋 Partidos Jugados y Cargados en Vivo")
-        st.write("Estos son los partidos reales que ya han sido jugados y cargados en vivo por los usuarios. Sus resultados persisten en el servidor de forma global y actualizan los favoritismos de inmediato:")
-        
-        scores_records = []
-        for idx, m in enumerate(loaded_matches):
-            scores_records.append({
-                "N°": idx + 1,
-                "Local": m["home"],
-                "Marcador": f"{m['home_score']} - {m['away_score']}",
-                "Visitante": m["away"]
-            })
-        st.dataframe(pd.DataFrame(scores_records), hide_index=True, width='stretch')
+        with st.expander("📋 Ver Historial de Resultados Cargados (Click para desplegar)", expanded=False):
+            st.write("Estos son los partidos reales que ya han sido jugados y cargados en vivo por los usuarios. Sus resultados persisten en el servidor de forma global y actualizan los de inmediato:")
+            
+            scores_records = []
+            for idx, m in enumerate(loaded_matches):
+                scores_records.append({
+                    "N°": idx + 1,
+                    "Local": m["home"],
+                    "Marcador": f"{m['home_score']} - {m['away_score']}",
+                    "Visitante": m["away"]
+                })
+            st.dataframe(pd.DataFrame(scores_records), hide_index=True, width='stretch')
         st.markdown("---")
         
     col_l, col_v = st.columns(2)
