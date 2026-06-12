@@ -489,7 +489,7 @@ with tab_tourn:
             rng = np.random.default_rng(seed)
             
             # 1. Predictor Callable
-            def current_predictor(a_eng, b_eng):
+            def current_predictor(a_eng, b_eng, venue="neutral"):
                 feat_a = team_features.get(a_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 feat_b = team_features.get(b_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 
@@ -695,7 +695,7 @@ with tab_tourn:
             rng = np.random.default_rng(seed)
             
             # Predictor Callable
-            def current_predictor(a_eng, b_eng):
+            def current_predictor(a_eng, b_eng, venue="neutral"):
                 feat_a = team_features.get(a_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 feat_b = team_features.get(b_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
                 
