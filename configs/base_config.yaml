@@ -1,0 +1,117 @@
+# =========================================================================
+# D10Sformer - Base configuration
+# Defaults reasonable para correr en Colab Pro (T4/L4). Override por experimento.
+# =========================================================================
+
+project:
+  name: d10sformer
+  seed: 42
+
+paths:
+  data_raw: data/raw
+  data_interim: data/interim
+  data_processed: data/processed
+  checkpoints: checkpoints
+  logs: logs
+
+data:
+  # Split temporal estricto - NO random
+  train_cutoff: "2023-07-01"
+  val_cutoff: "2024-07-01"
+  # test = todo lo posterior a val_cutoff
+  min_match_year: 2014  # filtra partidos muy viejos
+  competitions:
+    - world_cup
+    - champions_league
+    - premier_league
+    - laliga
+    - bundesliga
+    - serie_a
+    - ligue_1
+    - copa_america
+
+vocab:
+  max_size: 12000
+  min_freq: 5           # tokens con menos apariciones → UNK
+  special_tokens:
+    - "[PAD]"
+    - "[UNK]"
+    - "[CLS]"
+    - "[SEP]"
+    - "[MASK]"
+    - "[MATCH_START]"
+    - "[MATCH_END]"
+    - "[LINEUP_A]"
+    - "[LINEUP_B]"
+    - "[BENCH_A]"
+    - "[BENCH_B]"
+    - "[CONTEXT_START]"
+    - "[CONTEXT_END]"
+    - "[PREDICT_RESULT]"
+
+tokenizer:
+  max_seq_length: 512
+  context_recent_matches: 3   # k partidos recientes en contexto
+  bucketize_minutes: 15        # MIN_0_15, MIN_16_30, ...
+  bucketize_form: 5            # 5 niveles: FORM_VERY_LOW ... FORM_VERY_HIGH
+
+model:
+  d_model: 256
+  num_layers: 6
+  num_heads: 8
+  d_ff: 1024
+  dropout: 0.1
+  attention_dropout: 0.1
+  layer_norm_eps: 1.0e-12
+  initializer_range: 0.02
+
+training:
+  batch_size: 32
+  num_epochs: 20
+  lr: 5.0e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  grad_clip_norm: 1.0
+  mixed_precision: true
+  accumulation_steps: 1
+  early_stopping_patience: 5
+  eval_every_steps: 500
+  save_every_steps: 1000
+
+masking:
+  # Feature-level masking estocástico - clave del entrenamiento
+  p_mask_min: 0.0
+  p_mask_max: 0.8
+  p_mask_field_lineup: 0.30
+  p_mask_field_bench: 0.50
+  p_mask_field_context: 0.40
+  p_mask_field_features: 0.30
+  # MLM auxiliar (BERT-style, sobre tokens individuales)
+  p_mlm_token: 0.15
+
+loss:
+  lambda_result: 1.0       # CE sobre W/D/L
+  lambda_goals: 0.3        # MSE sobre (goles_A, goles_B)
+  lambda_mlm: 0.2          # CE sobre tokens enmascarados
+
+eval:
+  primary_metric: log_loss
+  metrics:
+    - log_loss
+    - brier
+    - ece
+    - accuracy
+
+simulation:
+  n_monte_carlo: 10000
+  sampling: stochastic    # NUNCA argmax
+  bracket: world_cup_2026
+
+wandb:
+  enabled: true
+  project: d10sformer
+  entity: null            # llenar con username de W&B cuando corramos
+  tags:
+    - mia305
+    - transformer
+    - football
