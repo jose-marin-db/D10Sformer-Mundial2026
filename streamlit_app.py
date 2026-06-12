@@ -300,8 +300,8 @@ tab1, tab_tourn, tab4 = st.tabs([
 # TAB 1: SIMULADOR INTERACTIVO (FT-TRANSFORMER V2)
 # -------------------------------------------------------------
 with tab1:
-    st.header("Simulador de Partidos con FT-Transformer v2")
-    st.write("Selecciona cualquier emparejamiento, ajusta las variables continuas de alta resolución y observa cómo el Transformer recalcula la distribución de goles en tiempo real:")
+    st.header("⚔️ Simular Partido Único")
+    st.write("Selecciona dos países y simula su enfrentamiento en tiempo real.")
     
     col1, col2 = st.columns(2)
     
@@ -461,8 +461,8 @@ with tab1:
 # TAB TOURN: SIMULADOR DE MUNDIAL COMPLETO
 # -------------------------------------------------------------
 with tab_tourn:
-    st.header("🎮 Simulador de Torneo Completo (Monte Carlo)")
-    st.write("¡Simula un Mundial completo en tiempo real! Corre el modelo estocástico de principio a fin, clasifica a los mejores terceros, resuelve las llaves de playoffs y corona al campeón de forma dinámica con marcadores exactos de los 104 partidos para armar tus prodes.")
+    st.header("🎮 Simular Mundial Completo")
+    st.write("Simula el torneo para generar tus prodes con marcadores exactos de los 104 partidos.")
     
     col_sim_cfg, col_sim_act = st.columns([1, 2])
     with col_sim_cfg:
@@ -482,25 +482,21 @@ with tab_tourn:
         )
         
         st.markdown("---")
-        st.markdown("**🎲 Opción 1: Generador de Prode (Timeline de Azar)**")
+        st.markdown("**🎲 Opción 1: Generador de Prode (Azar)**")
         run_sim = st.button("🏁 Simular 1 Mundial Completo", type="primary", use_container_width=True)
-        st.caption("Corre un único Mundial de forma stochástica. Excelente para obtener una combinación divertida de marcadores exactos y llaves de playoffs, con un alto nivel de sorpresas (como en la vida real).")
+        st.caption("Genera un fixture único con goles exactos y llaves de playoffs (con sorpresas del fútbol real).")
         
         st.markdown("---")
         st.markdown("**📊 Opción 2: Análisis Estadístico (Fiabilidad)**")
         mc_iters = st.slider("Iteraciones Monte Carlo:", min_value=50, max_value=1000, value=200, step=50, key="sim_mc_iters_widget")
         run_mc = st.button("📈 Correr Análisis Monte Carlo", type="secondary", use_container_width=True)
-        st.caption("Simula cientos de Mundiales en segundos de forma stochástica y consolida los resultados para darnos el verdadero ranking científico de favoritos sin el ruido del azar.")
+        st.caption("Consolida el verdadero ranking de favoritos promediando cientos de simulación.")
         
     with col_sim_act:
-        st.subheader("🔍 Estado de los Datos y Fiabilidad")
+        st.subheader("📊 ¿Azar o Fiabilidad?")
         st.write(
-            "⚽ **¿Por qué varía el Campeón cada vez que simulo un solo Mundial?**\n"
-            "Porque el fútbol es intrínsecamente impredecible. El modelo predice **probabilidades**, no verdades absolutas. "
-            "Cuando simulas un Mundial único, cada partido se define por azar ponderado. Esto puede generar sorpresas increíbles (como en la vida real, donde Grecia ganó la Eurocopa o Arabia Saudita le ganó a Argentina).\n\n"
-            "📊 **Para obtener predicciones FIABLES (Análisis Monte Carlo):**\n"
-            "Utiliza la **Opción 2** para simular el Mundial 200 o 500 veces de corrido. Al promediar los resultados, "
-            "el ruido estadístico desaparece y emerge el **verdadero y robusto favoritismo matemático** de cada país."
+            "🎲 **Opción 1:** Genera un torneo único con goles y playoffs, ideal para obtener combinaciones rápidas de resultados para tu prode.\n\n"
+            "📈 **Opción 2:** Simula el torneo cientos de veces en paralelo y consolida los favoritos para darte probabilidades científicas."
         )
         if "sim_result" in st.session_state:
             st.success(f"Mostrando simulación anterior (Semilla: {st.session_state['sim_seed']}, Modelo: {st.session_state['sim_predictor']})")
@@ -1140,13 +1136,13 @@ with tab_tourn:
 # TAB 4: ACTUALIZACIÓN EN VIVO (LIVE LOGGER)
 # -------------------------------------------------------------
 with tab4:
-    st.header("🔄 Cargar Resultados Oficiales en Vivo")
-    st.write("Registra los resultados reales del Mundial 2026. El sistema recalculará automáticamente el ELO, forma y promedio de goles de ambos equipos, actualizando todo el panel de forma interactiva:")
+    st.header("🔄 Cargar Resultados en Vivo")
+    st.write("Registra los marcadores reales del Mundial para recalcular el poder de cada selección.")
     
     # Render all loaded matches at the top inside a collapsible expander
     if loaded_matches:
         with st.expander("📋 Ver Historial de Resultados Cargados (Click para desplegar)", expanded=False):
-            st.write("Estos son los partidos reales que ya han sido jugados y cargados en vivo por los usuarios. Sus resultados persisten en el servidor de forma global y actualizan los de inmediato:")
+            st.write("Historial de partidos jugados cargados por los usuarios. Sus resultados persisten globalmente.")
             
             scores_records = []
             for idx, m in enumerate(loaded_matches):
