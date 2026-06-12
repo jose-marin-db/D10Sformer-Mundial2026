@@ -241,11 +241,12 @@ st.markdown('<div class="subtitle">Feature Tokenizer Transformer (FT-Transformer
 # -------------------------------------------------------------
 # 2. Main Tabs Setup
 # -------------------------------------------------------------
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🏆 Predicciones Fase 1 (Prode)",
-    "⚔️ Simulador Interactivo (FT-Transformer)",
-    "📈 Rankings de Fuerza e Insights",
-    "🔄 Actualización en Vivo",
+tab1, tab2, tab_tourn, tab3, tab4, tab5 = st.tabs([
+    "🏆 Predicciones de Fechas (Prode)",
+    "⚔️ Simulador de Partido Único",
+    "🎮 Simulador del Mundial Completo",
+    "📈 Rankings de Fuerza (ELO)",
+    "🔄 Actualización de Resultados Reales",
     "🧠 Simulador de Alineaciones (v1)"
 ])
 
@@ -458,6 +459,254 @@ with tab2:
             fig_v1 = go.Figure(data=[go.Pie(labels=labels_v1, values=values_v1, hole=.4, marker_colors=colors_v1)])
             fig_v1.update_layout(height=220, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
             st.plotly_chart(fig_v1, use_container_width=True)
+
+# -------------------------------------------------------------
+# TAB TOURN: SIMULADOR DE MUNDIAL COMPLETO
+# -------------------------------------------------------------
+with tab_tourn:
+    st.header("🎮 Simulador de Torneo Completo (Monte Carlo)")
+    st.write("Simula un Mundial completo en tiempo real. Corre las predicciones estocásticas grupo por grupo, clasifica a los mejores terceros, resuelve las llaves de play-off y corona al campeón de forma dinámica.")
+    
+    col_sim_cfg, col_sim_act = st.columns([1, 2])
+    with col_sim_cfg:
+        st.subheader("Configuración")
+        sim_predictor_choice = st.selectbox(
+            "Modelo Predictor del Prode:",
+            ["FT-Transformer (v2)", "D10Sformer (v1)"],
+            index=0,
+            key="sim_pred_choice_widget"
+        )
+        
+        sim_goals_mode = st.selectbox(
+            "Criterio de Goles / Marcadores:",
+            ["Directo del Transformer (Conservador)", "Simulación Poisson (Realista/Goleador)"],
+            index=1,
+            key="sim_goals_widget"
+        )
+        
+        run_sim = st.button("🏁 Iniciar Simulación del Mundial", type="primary", use_container_width=True)
+        
+    with col_sim_act:
+        st.subheader("Historial de Simulaciones")
+        if "sim_result" in st.session_state:
+            st.info(f"Mostrando simulación anterior (Semilla: {st.session_state['sim_seed']}, Modelo: {st.session_state['sim_predictor']})")
+        else:
+            st.write("Presiona el botón para correr tu primera simulación completa de 104 partidos del Mundial 2026.")
+            
+    if run_sim:
+        with st.spinner("Resolviendo fase de grupos, seleccionando mejores terceros y corriendo los playoffs..."):
+            import random
+            from simulation.simulator import simulate_tournament
+            from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL
+            
+            seed = random.randint(1, 100000)
+            rng = np.random.default_rng(seed)
+            
+            # Helper to adapt our models into the standard Predictor callable signature
+            def current_predictor(a_eng, b_eng, venue="neutral"):
+                feat_a = team_features.get(a_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
+                feat_b = team_features.get(b_eng, {'elo': 1500, 'form_pts': 1.0, 'recent_goals': 1.0})
+                
+                if sim_predictor_choice == "FT-Transformer (v2)":
+                    cat_tensor = torch.tensor([[tourn_map.get("FIFA World Cup", 0), 1, 2]], dtype=torch.long)
+                    cont_tensor = torch.tensor([[
+                        feat_a['elo'], feat_b['elo'], feat_a['elo'] - feat_b['elo'],
+                        feat_a['form_pts'], feat_b['form_pts'],
+                        feat_a['recent_goals'], feat_b['recent_goals'],
+                        feat_a['form_pts'], feat_b['form_pts']
+                    ]], dtype=torch.float32)
+                    with torch.no_grad():
+                        logits = model(cat_tensor, cont_tensor)
+                        probs = F.softmax(logits, dim=-1)[0].numpy()
+                    p_home, p_draw, p_away = 0.0, 0.0, 0.0
+                    for idx in range(36):
+                        h_g = idx // 6
+                        a_g = idx % 6
+                        if h_g > a_g: p_home += probs[idx]
+                        elif h_g == a_g: p_draw += probs[idx]
+                        else: p_away += probs[idx]
+                    return np.array([p_home, p_draw, p_away])
+                else:
+                    from data.tokenizer import MatchTokenizer, MatchDocument, RollingFeatures
+                    tokenizer_v1 = MatchTokenizer(vocab, max_seq_length=80)
+                    doc_v1 = MatchDocument(
+                        tournament="FIFA World Cup", team_a=a_eng, team_b=b_eng, venue="neutral", stage=None,
+                        lineup_a=None, lineup_b=None,
+                        features=RollingFeatures(
+                            home_elo=feat_a['elo'], away_elo=feat_b['elo'],
+                            home_form_pts=feat_a['form_pts'], away_form_pts=feat_b['form_pts'],
+                            home_recent_goals=feat_a['recent_goals'], away_recent_goals=feat_b['recent_goals']
+                        )
+                    )
+                    out_v1 = tokenizer_v1.tokenize(doc_v1)
+                    tok_v1_tensor = torch.tensor([out_v1.token_ids], dtype=torch.long)
+                    seg_v1_tensor = torch.tensor([out_v1.segment_ids], dtype=torch.long)
+                    with torch.no_grad():
+                        out_model_v1 = model_v1(tok_v1_tensor, seg_v1_tensor)
+                    res_v1_probs = F.softmax(out_model_v1["result_logits"], dim=-1)[0].numpy()
+                    return np.array([res_v1_probs[0], res_v1_probs[1], res_v1_probs[2]])
+            
+            sim_result = simulate_tournament(current_predictor, rng)
+            st.session_state["sim_result"] = sim_result
+            st.session_state["sim_seed"] = seed
+            st.session_state["sim_predictor"] = sim_predictor_choice
+            
+            st.balloons()
+            st.snow()
+            st.success(f"¡Simulación finalizada con éxito! Semilla: {seed}")
+            
+    if "sim_result" in st.session_state:
+        sim_result = st.session_state["sim_result"]
+        
+        # English to Spanish name dictionary
+        eng_to_spanish = {v: k for k, v in SPANISH_TO_ENGLISH.items()}
+        eng_to_spanish["Netherlands"] = "Países Bajos"
+        eng_to_spanish["Tunisia"] = "Túnez"
+        eng_to_spanish["South Korea"] = "República de Corea"
+        eng_to_spanish["Czech Republic"] = "República Checa"
+        eng_to_spanish["South Africa"] = "Sudáfrica"
+        
+        champ = sim_result.champion
+        runner = sim_result.runner_up
+        third = sim_result.third_place
+        
+        champ_spa = eng_to_spanish.get(champ, champ)
+        runner_spa = eng_to_spanish.get(runner, runner)
+        third_spa = eng_to_spanish.get(third, third)
+        
+        st.markdown(f"""
+        <div style="background-color: #FDF2E9; border: 3px solid #F59E0B; border-radius: 15px; padding: 2rem; text-align: center; margin-bottom: 2rem;">
+            <h1 style="color: #D97706; margin-bottom: 0.5rem; font-size: 3rem;">🏆 CAMPEÓN DEL MUNDO 🏆</h1>
+            <h2 style="color: #1E3A8A; font-size: 4rem; font-weight: 900; letter-spacing: 2px;">{champ_spa.upper()}</h2>
+            <div style="display: flex; justify-content: center; gap: 3rem; margin-top: 1.5rem; font-size: 1.4rem; font-weight: 700; color: #4B5563;">
+                <div>🥈 Subcampeón: <span style="color: #1F2937;">{runner_spa}</span></div>
+                <div>🥉 Tercer Puesto: <span style="color: #1F2937;">{third_spa}</span></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Expander for Group Standings
+        with st.expander("📊 Ver Posiciones de la Fase de Grupos (A - L)"):
+            # Render groups 4 by 4 inside tabs to keep it clean and ultra-visual
+            g_tab_a_d, g_tab_e_h, g_tab_i_l = st.tabs(["Grupos A - D", "Grupos E - H", "Grupos I - L"])
+            
+            with g_tab_a_d:
+                col_a, col_b, col_c, col_d = st.columns(4)
+                cols = [col_a, col_b, col_c, col_d]
+                for idx, grp in enumerate(["Group_A", "Group_B", "Group_C", "Group_D"]):
+                    standings = sim_result.group_standings[grp]
+                    records = []
+                    for rank, s in enumerate(standings):
+                        records.append({
+                            "Pos": rank + 1,
+                            "País": eng_to_spanish.get(s.team, s.team),
+                            "Pts": s.points,
+                            "DG": s.goal_diff
+                        })
+                    cols[idx].markdown(f"##### Grupo {grp[-1]}")
+                    cols[idx].dataframe(pd.DataFrame(records), hide_index=True)
+                    
+            with g_tab_e_h:
+                col_e, col_f, col_g, col_h = st.columns(4)
+                cols = [col_e, col_f, col_g, col_h]
+                for idx, grp in enumerate(["Group_E", "Group_F", "Group_G", "Group_H"]):
+                    standings = sim_result.group_standings[grp]
+                    records = []
+                    for rank, s in enumerate(standings):
+                        records.append({
+                            "Pos": rank + 1,
+                            "País": eng_to_spanish.get(s.team, s.team),
+                            "Pts": s.points,
+                            "DG": s.goal_diff
+                        })
+                    cols[idx].markdown(f"##### Grupo {grp[-1]}")
+                    cols[idx].dataframe(pd.DataFrame(records), hide_index=True)
+                    
+            with g_tab_i_l:
+                col_i, col_j, col_k, col_l = st.columns(4)
+                cols = [col_i, col_j, col_k, col_l]
+                for idx, grp in enumerate(["Group_I", "Group_J", "Group_K", "Group_L"]):
+                    standings = sim_result.group_standings[grp]
+                    records = []
+                    for rank, s in enumerate(standings):
+                        records.append({
+                            "Pos": rank + 1,
+                            "País": eng_to_spanish.get(s.team, s.team),
+                            "Pts": s.points,
+                            "DG": s.goal_diff
+                        })
+                    cols[idx].markdown(f"##### Grupo {grp[-1]}")
+                    cols[idx].dataframe(pd.DataFrame(records), hide_index=True)
+                    
+        # Expander for Playoffs
+        from simulation.bracket import ROUND_OF_32, ROUND_OF_16, QUARTERFINALS, SEMIFINALS, THIRD_PLACE, FINAL
+        
+        with st.expander("⚔️ Ver Llaves de Eliminación Directa (Playoffs)"):
+            r32_tab, r16_tab, qf_tab, sf_tab, f_tab = st.tabs([
+                "Dieciseisavos (32)", "Octavos (16)", "Cuartos (8)", "Semifinales", "Tercer Puesto y Final"
+            ])
+            
+            with r32_tab:
+                st.markdown("#### Dieciseisavos de Final (32 equipos)")
+                col_32a, col_32b = st.columns(2)
+                for i, m in enumerate(ROUND_OF_32):
+                    w = sim_result.knockout_winners[m.match_id]
+                    l = sim_result.knockout_losers[m.match_id]
+                    w_spa = eng_to_spanish.get(w, w)
+                    l_spa = eng_to_spanish.get(l, l)
+                    text = f"🔹 **Partido {m.match_id}:** <span style='color: #10B981; font-weight: 700;'>✅ {w_spa}</span> vs {l_spa}"
+                    if i % 2 == 0:
+                        col_32a.markdown(text, unsafe_allow_html=True)
+                    else:
+                        col_32b.markdown(text, unsafe_allow_html=True)
+                        
+            with r16_tab:
+                st.markdown("#### Octavos de Final (16 equipos)")
+                col_16a, col_16b = st.columns(2)
+                for i, m in enumerate(ROUND_OF_16):
+                    w = sim_result.knockout_winners[m.match_id]
+                    l = sim_result.knockout_losers[m.match_id]
+                    w_spa = eng_to_spanish.get(w, w)
+                    l_spa = eng_to_spanish.get(l, l)
+                    text = f"🔹 **Partido {m.match_id}:** <span style='color: #10B981; font-weight: 700;'>✅ {w_spa}</span> vs {l_spa}"
+                    if i % 2 == 0:
+                        col_16a.markdown(text, unsafe_allow_html=True)
+                    else:
+                        col_16b.markdown(text, unsafe_allow_html=True)
+                        
+            with qf_tab:
+                st.markdown("#### Cuartos de Final (8 equipos)")
+                col_qfa, col_qfb = st.columns(2)
+                for i, m in enumerate(QUARTERFINALS):
+                    w = sim_result.knockout_winners[m.match_id]
+                    l = sim_result.knockout_losers[m.match_id]
+                    w_spa = eng_to_spanish.get(w, w)
+                    l_spa = eng_to_spanish.get(l, l)
+                    text = f"🔹 **Partido {m.match_id}:** <span style='color: #10B981; font-weight: 700;'>✅ {w_spa}</span> vs {l_spa}"
+                    if i % 2 == 0:
+                        col_qfa.markdown(text, unsafe_allow_html=True)
+                    else:
+                        col_qfb.markdown(text, unsafe_allow_html=True)
+                        
+            with sf_tab:
+                st.markdown("#### Semifinales")
+                for m in SEMIFINALS:
+                    w = sim_result.knockout_winners[m.match_id]
+                    l = sim_result.knockout_losers[m.match_id]
+                    w_spa = eng_to_spanish.get(w, w)
+                    l_spa = eng_to_spanish.get(l, l)
+                    st.markdown(f"🔹 **Partido {m.match_id}:** <span style='color: #10B981; font-weight: 700;'>✅ {w_spa}</span> vs {l_spa}", unsafe_allow_html=True)
+                    
+            with f_tab:
+                st.markdown("#### Tercer Puesto")
+                w_3 = sim_result.knockout_winners[THIRD_PLACE.match_id]
+                l_3 = sim_result.knockout_losers[THIRD_PLACE.match_id]
+                st.markdown(f"🥉 **Tercer Puesto:** <span style='color: #F59E0B; font-weight: 700;'>✅ {eng_to_spanish.get(w_3, w_3)}</span> vs {eng_to_spanish.get(l_3, l_3)}", unsafe_allow_html=True)
+                
+                st.markdown("#### Gran Final de la Copa del Mundo 2026")
+                w_f = sim_result.knockout_winners[FINAL.match_id]
+                l_f = sim_result.knockout_losers[FINAL.match_id]
+                st.markdown(f"🏆 **Gran Final:** <span style='color: #D97706; font-weight: 900; font-size: 1.3rem;'>🥇 ✅ {eng_to_spanish.get(w_f, w_f)}</span> vs {eng_to_spanish.get(l_f, l_f)}", unsafe_allow_html=True)
 
 # -------------------------------------------------------------
 # TAB 3: RANKING DE FUERZA E INSIGHTS (XAI)
