@@ -739,7 +739,7 @@ with tab_tourn:
                 
             st.success(f"¡Análisis Monte Carlo de {mc_iters} simulaciones finalizado con éxito!")
             
-    if "sim_result" in st.session_state:
+    if "sim_result" in st.session_state and "sim_group_scores" in st.session_state and "sim_knockout_scores" in st.session_state:
         sim_result = st.session_state["sim_result"]
         sim_group_scores = st.session_state["sim_group_scores"]
         sim_knockout_scores = st.session_state["sim_knockout_scores"]
