@@ -973,12 +973,12 @@ with tab_tourn:
                     display: flex;
                     flex-direction: row;
                     justify-content: space-between;
-                    background-color: #0F172A; /* Modern dark Slate background */
-                    padding: 1.5rem;
-                    border-radius: 12px;
+                    background-color: transparent; /* Seamless page integration */
+                    padding: 0.5rem;
+                    border-radius: 0;
                     overflow-x: auto;
-                    gap: 1.5rem;
-                    border: 1px solid #1E293B;
+                    gap: 1.2rem;
+                    border: none; /* Minimalist flat look */
                 }
                 .round {
                     display: flex;
@@ -989,49 +989,52 @@ with tab_tourn:
                 }
                 .round-title {
                     text-align: center;
-                    color: #38BDF8;
+                    color: #1E3A8A; /* Primary theme color */
                     font-weight: 800;
-                    font-size: 0.85rem;
-                    margin-bottom: 1rem;
+                    font-size: 0.8rem;
+                    margin-bottom: 0.8rem;
                     text-transform: uppercase;
                     letter-spacing: 1px;
-                    border-bottom: 2px solid #334155;
-                    padding-bottom: 0.5rem;
+                    border-bottom: 2px solid #E2E8F0;
+                    padding-bottom: 0.4rem;
                 }
                 .bracket-match {
-                    background: #1E293B;
-                    border: 1px solid #334155;
+                    background: #FFFFFF; /* Modern white card */
+                    border: 1px solid #E2E8F0; /* Soft border */
                     border-radius: 8px;
-                    padding: 0.6rem;
-                    margin: 0.4rem 0;
-                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-                    transition: transform 0.2s;
+                    padding: 0.5rem;
+                    margin: 0.3rem 0;
+                    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); /* Soft minimalist shadow */
+                    transition: all 0.2s ease-in-out;
                 }
                 .bracket-match:hover {
-                    border-color: #38BDF8;
-                    transform: scale(1.02);
+                    border-color: #3B82F6; /* Vibrant blue hover border */
+                    background-color: #F8FAFC;
+                    transform: translateY(-1px); /* Gentle slide up */
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
                 }
                 .match-header {
-                    font-size: 0.7rem;
-                    color: #64748B;
-                    margin-bottom: 0.3rem;
-                    font-weight: bold;
+                    font-size: 0.65rem;
+                    color: #94A3B8;
+                    margin-bottom: 0.2rem;
+                    font-weight: 700;
                     text-transform: uppercase;
+                    letter-spacing: 0.5px;
                 }
                 .bracket-team {
                     display: flex;
                     justify-content: space-between;
-                    padding: 0.15rem 0;
-                    font-size: 0.8rem;
+                    padding: 0.1rem 0;
+                    font-size: 0.78rem;
                     font-weight: 600;
-                    color: #E2E8F0;
+                    color: #1E293B; /* Charcoal dark text */
                 }
                 .bracket-team.winner {
-                    color: #10B981; /* Green for winner */
-                    font-weight: bold;
+                    color: #059669; /* Rich green for winner */
+                    font-weight: 700;
                 }
                 .bracket-team.loser {
-                    color: #64748B; /* Darker slate for loser */
+                    color: #CBD5E1; /* Light faded grey for loser */
                     text-decoration: line-through;
                     font-weight: normal;
                 }
