@@ -1007,7 +1007,26 @@ with tab_tourn:
                     res_v1_probs = F.softmax(out_model_v1["result_logits"], dim=-1)[0].numpy()
                     return np.array([res_v1_probs[0], res_v1_probs[1], res_v1_probs[2]])
                     
-            mc_result = monte_carlo(current_predictor, n_iters=mc_iters, seed=seed)
+            from simulation.simulator import FixedResults
+            fr = FixedResults()
+            for m in loaded_matches:
+                if "match_id" in m:
+                    fr.add_knockout_result(m["match_id"], spanish_to_english_web.get(m["winner"], m["winner"]))
+                else:
+                    match_group = None
+                    for grp, teams in WC2026_GROUPS.items():
+                        if m["home"] in teams and m["away"] in teams:
+                            match_group = grp
+                            break
+                    if match_group:
+                        fr.add_group_match(
+                            match_group,
+                            spanish_to_english_web.get(m["home"], m["home"]),
+                            spanish_to_english_web.get(m["away"], m["away"]),
+                            m["home_score"],
+                            m["away_score"]
+                        )
+            mc_result = monte_carlo(current_predictor, n_iters=mc_iters, seed=seed, fixed_results=fr)
             df_mc = mc_result.to_dataframe()
             
             st.session_state["mc_df"] = df_mc
